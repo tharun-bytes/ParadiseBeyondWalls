@@ -9,6 +9,9 @@ import java.awt.Graphics2D;
 public class TileManager {
     private static final int GROUND = 0;
     private static final int WALL = 1;
+    private static final int WATER = 2;
+    private static final int SAND = 3;
+    private static final int DOOR = 4; // NEW: The Escape Gate!
 
     private final GamePanel game;
     private final Tile[] tiles = {
@@ -25,27 +28,36 @@ public class TileManager {
     public void createLevelMap(int level) {
         for (int column = 0; column < game.maxWorldCol; column++) {
             for (int row = 0; row < game.maxWorldRow; row++) {
-                mapTiles[column][row] = isBorder(column, row) ? WALL : GROUND;
+
+                // 1. THE EASTERN OCEAN
+                if (column == game.maxWorldCol - 1) {
+                    mapTiles[column][row] = WATER;
+                }
+                // 2. THE BEACH
+                else if (column == game.maxWorldCol - 2 || column == game.maxWorldCol - 3) {
+                    mapTiles[column][row] = SAND;
+                }
+                // 3. NEW: THE ESCAPE GATE (Placed in the middle of the Left Wall)
+                else if (column == 0 && (row == 24 || row == 25)) {
+                    mapTiles[column][row] = DOOR;
+                }
+                // 4. THE BORDER WALLS
+                else if (column == 0 || row == 0 || row == game.maxWorldRow - 1) {
+                    mapTiles[column][row] = WALL;
+                }
+                // 5. THE COURTYARD
+                else {
+                    mapTiles[column][row] = GROUND;
+                }
             }
         }
 
         switch (level) {
-            case 1:
-                buildLevelOne();
-                break;
-            case 2:
-                buildLevelTwo();
-                break;
-            case 3:
-                buildLevelThree();
-                break;
-            default:
-                throw new IllegalArgumentException("Unknown level: " + level);
+            case 1: buildLevelOne(); break;
+            case 2: buildLevelTwo(); break;
+            case 3: buildLevelThree(); break;
+            default: throw new IllegalArgumentException("Unknown level: " + level);
         }
-    }
-
-    private boolean isBorder(int column, int row) {
-        return column == 0 || row == 0 || column == game.maxWorldCol - 1 || row == game.maxWorldRow - 1;
     }
 
     private void buildLevelOne() {
@@ -85,10 +97,21 @@ public class TileManager {
     }
 
     public boolean isBlocked(int column, int row) {
-        return mapTiles[column][row] == WALL;
+        if (mapTiles[column][row] == WALL || mapTiles[column][row] == WATER) return true;
+
+        // NEW: If it is the door, block the player UNLESS they have all the points!
+        if (mapTiles[column][row] == DOOR) {
+            return game.capturedPoints < game.levelConfig.pointTiles.length;
+        }
+
+        return false;
     }
 
     public void draw(Graphics2D graphics) {
+        int rightEdgeX = (game.maxWorldCol * game.tileSize) - game.playerX + game.playerScreenX;
+        graphics.setColor(new Color(28, 87, 115));
+        graphics.fillRect(rightEdgeX, 0, game.screenWidth, game.screenHeight);
+
         for (int column = 0; column < game.maxWorldCol; column++) {
             for (int row = 0; row < game.maxWorldRow; row++) {
                 int worldX = column * game.tileSize;
@@ -97,8 +120,15 @@ public class TileManager {
 
                 int screenX = worldX - game.playerX + game.playerScreenX;
                 int screenY = worldY - game.playerY + game.playerScreenY;
+
                 if (mapTiles[column][row] == WALL) {
                     drawWall(graphics, screenX, screenY);
+                } else if (mapTiles[column][row] == WATER) {
+                    drawWater(graphics, screenX, screenY, column, row);
+                } else if (mapTiles[column][row] == SAND) {
+                    drawSand(graphics, screenX, screenY, column, row);
+                } else if (mapTiles[column][row] == DOOR) {
+                    drawDoor(graphics, screenX, screenY); // NEW!
                 } else {
                     drawGround(graphics, screenX, screenY, column, row);
                 }
@@ -110,15 +140,9 @@ public class TileManager {
         int variation = Math.floorMod(column * 13 + row * 7, 3);
         Color base;
         switch (variation) {
-            case 0:
-                base = new Color(31, 79, 76);
-                break;
-            case 1:
-                base = new Color(34, 86, 80);
-                break;
-            default:
-                base = new Color(27, 72, 71);
-                break;
+            case 0: base = new Color(31, 79, 76); break;
+            case 1: base = new Color(34, 86, 80); break;
+            default: base = new Color(27, 72, 71); break;
         }
         graphics.setColor(base);
         graphics.fillRect(x, y, game.tileSize, game.tileSize);
@@ -140,5 +164,55 @@ public class TileManager {
         graphics.drawLine(x + game.tileSize / 2, y, x + game.tileSize / 2, y + game.tileSize / 2);
         graphics.drawLine(x + game.tileSize / 4, y + game.tileSize / 2, x + game.tileSize / 4, y + game.tileSize);
         graphics.drawLine(x + game.tileSize * 3 / 4, y + game.tileSize / 2, x + game.tileSize * 3 / 4, y + game.tileSize);
+    }
+
+    private void drawWater(Graphics2D graphics, int x, int y, int column, int row) {
+        graphics.setColor(new Color(28, 87, 115));
+        graphics.fillRect(x, y, game.tileSize, game.tileSize);
+        graphics.setColor(new Color(42, 115, 148, 150));
+        int waveOffset = (column + row) % 3 * 5;
+        graphics.drawLine(x + 10, y + 20 + waveOffset, x + 25, y + 20 + waveOffset);
+        graphics.drawLine(x + 25, y + 35 - waveOffset, x + 40, y + 35 - waveOffset);
+        graphics.setColor(new Color(0, 0, 0, 10));
+        graphics.drawRect(x, y, game.tileSize, game.tileSize);
+    }
+
+    private void drawSand(Graphics2D graphics, int x, int y, int column, int row) {
+        graphics.setColor(new Color(227, 210, 161));
+        graphics.fillRect(x, y, game.tileSize, game.tileSize);
+        if ((column * row) % 17 == 0) {
+            graphics.setColor(new Color(181, 161, 110, 120));
+            graphics.fillOval(x + 15, y + 15, 3, 3);
+            graphics.fillOval(x + 35, y + 30, 2, 2);
+        }
+        graphics.setColor(new Color(0, 0, 0, 10));
+        graphics.drawRect(x, y, game.tileSize, game.tileSize);
+    }
+
+    // --- NEW: Escape Gate Painter ---
+    private void drawDoor(Graphics2D graphics, int x, int y) {
+        // Check if the player has all the points required for this level!
+        boolean isOpen = (game.capturedPoints >= game.levelConfig.pointTiles.length);
+
+        // Draw the stone floor underneath
+        graphics.setColor(new Color(30, 40, 50));
+        graphics.fillRect(x, y, game.tileSize, game.tileSize);
+
+        if (!isOpen) {
+            // Closed Gate: Draw heavy iron bars
+            graphics.setColor(new Color(20, 25, 30));
+            for(int i = 0; i < game.tileSize; i += 12) {
+                graphics.fillRect(x + i, y, 6, game.tileSize); // Vertical bars
+            }
+            graphics.fillRect(x, y + 10, game.tileSize, 8); // Horizontal crossbar
+            graphics.fillRect(x, y + 30, game.tileSize, 8); // Horizontal crossbar
+        } else {
+            // Open Gate: Draw a glowing escape portal!
+            graphics.setColor(new Color(100, 255, 150, 100)); // Glowing green transparent box
+            graphics.fillRect(x, y, game.tileSize, game.tileSize);
+            graphics.setColor(new Color(200, 255, 200)); // Bright inner frame
+            graphics.drawRect(x + 2, y + 2, game.tileSize - 4, game.tileSize - 4);
+            graphics.drawRect(x + 6, y + 6, game.tileSize - 12, game.tileSize - 12);
+        }
     }
 }

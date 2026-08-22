@@ -20,16 +20,19 @@ public final class LevelConfig {
         switch (level) {
             case 1:
                 return new LevelConfig(1, "The Fallen Courtyard", 2,
-                        new int[][] {{18, 18}, {27, 22}, {18, 27}, {32, 31}, {22, 34}},
-                        new int[][] {{15, 15}, {35, 20}});
+                        // Spread wide across the map, but safely dodging the buildings!
+                        new int[][] {{15, 18}, {32, 18}, {25, 44}, {18, 32}, {32, 32}},
+                        new int[][] {{12, 12}, {38, 38}});
             case 2:
                 return new LevelConfig(2, "The Shattered District", 3,
-                        new int[][] {{11, 18}, {23, 10}, {32, 23}, {37, 33}, {22, 32}, {12, 36}, {28, 40}},
-                        new int[][] {{14, 19}, {37, 17}, {21, 39}});
+                        // 7 points scattered in a wide ring
+                        new int[][] {{16, 16}, {33, 16}, {25, 18}, {18, 25}, {32, 25}, {16, 38}, {33, 38}},
+                        new int[][] {{10, 10}, {40, 10}, {25, 40}});
             case 3:
                 return new LevelConfig(3, "Beyond the Last Wall", 4,
-                        new int[][] {{9, 16}, {17, 11}, {25, 14}, {29, 23}, {40, 26}, {29, 35}, {10, 38}, {24, 39}, {39, 40}, {18, 45}},
-                        new int[][] {{14, 14}, {38, 14}, {15, 35}, {38, 39}});
+                        // 10 points pushed to the absolute edges of the map
+                        new int[][] {{14, 18}, {20, 18}, {28, 18}, {35, 18}, {14, 32}, {35, 32}, {18, 42}, {25, 42}, {32, 42}, {25, 25}},
+                        new int[][] {{12, 12}, {38, 12}, {12, 38}, {38, 38}});
             default:
                 throw new IllegalArgumentException("Unknown level: " + level);
         }
