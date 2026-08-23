@@ -40,13 +40,13 @@ public class GamePanel extends JPanel implements Runnable {
     public final int playerScreenX = screenWidth / 2 - tileSize / 2;
     public final int playerScreenY = screenHeight / 2 - tileSize / 2;
 
-    // Hitbox size for collision
-    public final int playerSize = 22;
+    // Player collision hitbox
+    public final int playerSize = 28;
 
-    // --- CHARACTER SPRITE SCALE SETTING (Adjust between 1 to 4) ---
+    // Sprite scale setting (2 = clean, balanced size)
     public int characterScale = 2;
 
-    // --- HIDING / HOUSE MECHANIC ---
+    // Hiding state
     public boolean isHiding = false;
     public Building currentNearbyBuilding = null;
 
@@ -90,7 +90,6 @@ public class GamePanel extends JPanel implements Runnable {
 
         try {
             BufferedImage spriteSheet = ImageIO.read(new File("src/paradise/entity/run1.png"));
-
             int frameWidth = spriteSheet.getWidth() / 8;
             int frameHeight = spriteSheet.getHeight();
 
@@ -98,24 +97,23 @@ public class GamePanel extends JPanel implements Runnable {
                 playerRunImages[i] = spriteSheet.getSubimage(i * frameWidth, 0, frameWidth, frameHeight);
             }
         } catch (IOException e) {
-            System.out.println("Could not load run1.png! Check the src/paradise/entity/ folder.");
+            System.out.println("Could not load run1.png from src/paradise/entity/ folder.");
         }
 
         setupBuildings();
         setupTrees();
-
         restartGame();
     }
 
     private void setupBuildings() {
         mapBuildings = new Building[7];
-        mapBuildings[0] = new Building(6 * tileSize, 6 * tileSize, 1);
-        mapBuildings[1] = new Building(35 * tileSize, 6 * tileSize, 2);
-        mapBuildings[2] = new Building(6 * tileSize, 35 * tileSize, 3);
-        mapBuildings[3] = new Building(35 * tileSize, 35 * tileSize, 4);
-        mapBuildings[4] = new Building(4 * tileSize, 20 * tileSize, 5);
-        mapBuildings[5] = new Building(34 * tileSize, 20 * tileSize, 6);
-        mapBuildings[6] = new Building(22 * tileSize, 4 * tileSize, 7);
+        mapBuildings[0] = new Building(14 * tileSize, 14 * tileSize, 1);
+        mapBuildings[1] = new Building(32 * tileSize, 14 * tileSize, 2);
+        mapBuildings[2] = new Building(14 * tileSize, 32 * tileSize, 3);
+        mapBuildings[3] = new Building(32 * tileSize, 32 * tileSize, 4);
+        mapBuildings[4] = new Building(20 * tileSize, 18 * tileSize, 5);
+        mapBuildings[5] = new Building(28 * tileSize, 18 * tileSize, 6);
+        mapBuildings[6] = new Building(24 * tileSize, 30 * tileSize, 7);
     }
 
     private final int[][] GREEN_MODELS = {
@@ -145,11 +143,12 @@ public class GamePanel extends JPanel implements Runnable {
         class ForestHelper {
             void plant(int col, int row, int[][] modelPool) {
                 if (col < 0 || col >= maxWorldCol || row < 0 || row >= maxWorldRow) return;
-                if (col >= maxWorldCol - 3) return;
                 if (occupied[col][row]) return;
 
-                if (col >= 45 && col <= 48 && row >= 23 && row <= 27) return;
-                if (col >= 0 && col <= 3 && row >= 23 && row <= 26) return;
+                // Keep East Beach Gate and shore completely open
+                if (col >= 38 && col <= 49 && row >= 21 && row <= 28) return;
+                // Keep West Exit Gate completely open
+                if (col >= 0 && col <= 9 && row >= 21 && row <= 28) return;
 
                 int treeX = col * tileSize;
                 int treeY = row * tileSize;
@@ -158,7 +157,7 @@ public class GamePanel extends JPanel implements Runnable {
                 if (mapBuildings != null) {
                     for (Building b : mapBuildings) {
                         if (b != null) {
-                            Rectangle buildingBox = new Rectangle(b.worldX, b.worldY, b.drawWidth, b.drawHeight);
+                            Rectangle buildingBox = new Rectangle(b.worldX - 10, b.worldY - 10, b.drawWidth + 20, b.drawHeight + 20);
                             if (buildingBox.intersects(treeBox)) {
                                 return;
                             }
@@ -183,17 +182,14 @@ public class GamePanel extends JPanel implements Runnable {
         }
 
         ForestHelper forest = new ForestHelper();
-        forest.plantCluster(36, 48, 2, 14, 0.45, SNOW_MODELS);
-        forest.plantCluster(36, 48, 36, 48, 0.45, SNOW_MODELS);
-        forest.plantCluster(2, 18, 2, 18, 0.50, GREEN_MODELS);
-        forest.plantCluster(2, 18, 32, 48, 0.50, GREEN_MODELS);
-        forest.plantCluster(2, 10, 19, 31, 0.40, GREEN_MODELS);
-        forest.plantCluster(19, 31, 2, 10, 0.35, GREEN_MODELS);
-        forest.plantCluster(19, 31, 40, 48, 0.35, GREEN_MODELS);
+        forest.plantCluster(28, 38, 6, 16, 0.35, SNOW_MODELS);
+        forest.plantCluster(28, 38, 32, 42, 0.35, SNOW_MODELS);
+        forest.plantCluster(10, 20, 6, 16, 0.35, GREEN_MODELS);
+        forest.plantCluster(10, 20, 32, 42, 0.35, GREEN_MODELS);
 
         for (int c = 12; c < 38; c++) {
             for (int r = 12; r < 38; r++) {
-                if (rand.nextDouble() < 0.08) {
+                if (rand.nextDouble() < 0.05) {
                     forest.plant(c, r, GREEN_MODELS);
                 }
             }
@@ -204,8 +200,6 @@ public class GamePanel extends JPanel implements Runnable {
         forest.plant(29, 21, GOLD_MODELS);
         forest.plant(21, 30, GOLD_MODELS);
         forest.plant(30, 29, GOLD_MODELS);
-        forest.plant(25, 18, GOLD_MODELS);
-        forest.plant(25, 32, GOLD_MODELS);
 
         mapTrees = treeList.toArray(new Tree[0]);
     }
@@ -256,32 +250,39 @@ public class GamePanel extends JPanel implements Runnable {
             return;
         }
 
-        // Check if player is near any house
+        // 1. Ghosts always update & patrol
+        if (ghosts != null) {
+            for (Ghost ghost : ghosts) {
+                if (ghost != null) {
+                    ghost.update();
+                }
+            }
+        }
+
+        if (hitCooldown > 0) hitCooldown--;
+
         checkHouseProximity();
 
-        // Handle 'E' press for entering/exiting house
+        // 2. Handle 'E' press to hide / exit house
         if (keyHandler.consumeEPressed()) {
             if (isHiding) {
                 isHiding = false;
             } else if (currentNearbyBuilding != null) {
                 isHiding = true;
                 keyHandler.clearMovement();
-
-                // Auto-collect any capture point located inside or next to this building
-                collectPointsInsideBuilding(currentNearbyBuilding);
             }
         }
 
-        // Only allow movement and ghost interactions if not hiding inside a house
+        // 3. Process movement, ghost damage, and point collection when outside
         if (!isHiding) {
             movePlayer();
-            if (hitCooldown > 0) hitCooldown--;
 
-            for (Ghost ghost : ghosts) {
-                ghost.update();
-                if (hitCooldown == 0 && playerTouches(ghost.worldX, ghost.worldY, ghost.size)) {
-                    harmPlayer();
-                    break;
+            if (hitCooldown == 0 && ghosts != null) {
+                for (Ghost ghost : ghosts) {
+                    if (ghost != null && playerTouchesGhost(ghost)) {
+                        harmPlayer();
+                        break;
+                    }
                 }
             }
 
@@ -292,7 +293,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     private void checkHouseProximity() {
         currentNearbyBuilding = null;
-        Rectangle playerBox = new Rectangle(playerX - 20, playerY - 20, playerSize + 40, playerSize + 40);
+        Rectangle playerBox = new Rectangle(playerX - 10, playerY - 10, playerSize + 20, playerSize + 20);
 
         if (mapBuildings != null) {
             for (Building b : mapBuildings) {
@@ -302,20 +303,6 @@ public class GamePanel extends JPanel implements Runnable {
                         currentNearbyBuilding = b;
                         break;
                     }
-                }
-            }
-        }
-    }
-
-    private void collectPointsInsideBuilding(Building b) {
-        Rectangle buildingArea = new Rectangle(b.worldX - 20, b.worldY - 20, b.drawWidth + 40, b.drawHeight + 40);
-        for (int i = 0; i < capturePoints.length; i++) {
-            CapturePoint point = capturePoints[i];
-            if (point != null) {
-                Rectangle pointRect = new Rectangle(point.worldX, point.worldY, tileSize, tileSize);
-                if (buildingArea.intersects(pointRect)) {
-                    capturePoints[i] = null;
-                    capturedPoints++;
                 }
             }
         }
@@ -352,18 +339,26 @@ public class GamePanel extends JPanel implements Runnable {
         playerY += deltaY;
     }
 
-    private boolean playerTouches(int entityX, int entityY, int entitySize) {
-        int playerCenterX = playerX + playerSize / 2;
-        int playerCenterY = playerY + playerSize / 2;
-        int entityCenterX = entityX + entitySize / 2;
-        int entityCenterY = entityY + entitySize / 2;
-        return Math.hypot(playerCenterX - entityCenterX, playerCenterY - entityCenterY) < (playerSize + entitySize) / 2 - 7;
+    private boolean playerTouchesGhost(Ghost ghost) {
+        Rectangle pBox = new Rectangle(playerX, playerY, playerSize, playerSize);
+        Rectangle gBox = new Rectangle(ghost.worldX + 6, ghost.worldY + 6, ghost.size - 12, ghost.size - 12);
+        return pBox.intersects(gBox);
     }
 
     private void harmPlayer() {
         playerHealth--;
-        hitCooldown = 85;
+        hitCooldown = 120; // 2 seconds of invulnerability
+
+        if (ghosts != null) {
+            for (Ghost ghost : ghosts) {
+                if (ghost != null) {
+                    ghost.resetToSpawn();
+                }
+            }
+        }
+
         movePlayerToSpawn();
+
         if (playerHealth <= 0) {
             gameState = GameState.GAME_OVER;
             keyHandler.clearMovement();
@@ -371,11 +366,15 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void collectCapturePoints() {
-        for (int index = 0; index < capturePoints.length; index++) {
-            CapturePoint point = capturePoints[index];
+        Rectangle playerBox = new Rectangle(playerX, playerY, playerSize, playerSize);
+
+        for (int i = 0; i < capturePoints.length; i++) {
+            CapturePoint point = capturePoints[i];
             if (point == null) continue;
-            if (playerTouches(point.worldX + 7, point.worldY + 7, tileSize - 14)) {
-                capturePoints[index] = null;
+
+            Rectangle pointBox = new Rectangle(point.worldX, point.worldY, tileSize, tileSize);
+            if (playerBox.intersects(pointBox)) {
+                capturePoints[i] = null;
                 capturedPoints++;
             }
         }
@@ -386,7 +385,8 @@ public class GamePanel extends JPanel implements Runnable {
             int playerCol = (playerX + playerSize / 2) / tileSize;
             int playerRow = (playerY + playerSize / 2) / tileSize;
 
-            if (playerCol == 0 && (playerRow == 24 || playerRow == 25)) {
+            // Trigger level progression when stepping onto West Gate exit
+            if (playerCol <= 4 && (playerRow >= 23 && playerRow <= 26)) {
                 gameState = GameState.LEVEL_TRANSITION;
                 transitionTimer = 0;
                 keyHandler.clearMovement();
@@ -423,7 +423,7 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void movePlayerToSpawn() {
-        playerX = 47 * tileSize;
+        playerX = 46 * tileSize;
         playerY = 25 * tileSize;
         facingRight = false;
     }
@@ -462,14 +462,11 @@ public class GamePanel extends JPanel implements Runnable {
             ghost.draw(graphics2D, animationFrame);
         }
 
-        // Only draw player when outside
         if (!isHiding) {
             drawPlayer(graphics2D);
         }
 
-        // Draw interaction prompts
         drawInteractionPrompt(graphics2D);
-
         ui.draw(graphics2D);
         graphics2D.dispose();
     }

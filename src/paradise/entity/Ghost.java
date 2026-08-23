@@ -13,6 +13,8 @@ public class Ghost {
 
     private final GamePanel game;
     private final int speed;
+    private final int startColumn;
+    private final int startRow;
     private int patrolTimer;
     private int directionX;
     private int directionY = 1;
@@ -24,12 +26,28 @@ public class Ghost {
     public Ghost(GamePanel game, int startColumn, int startRow, int speed) {
         this.game = game;
         this.speed = speed;
+        this.startColumn = startColumn;
+        this.startRow = startRow;
         this.worldX = startColumn * game.tileSize + 6;
         this.worldY = startRow * game.tileSize + 4;
         this.size = game.tileSize - 12;
     }
 
+    public void resetToSpawn() {
+        this.worldX = startColumn * game.tileSize + 6;
+        this.worldY = startRow * game.tileSize + 4;
+        this.patrolTimer = 0;
+        this.directionX = 0;
+        this.directionY = 1;
+    }
+
     public void update() {
+        // If player is hiding inside a house, ghosts do NOT chase; they wander peacefully
+        if (game.isHiding) {
+            patrol();
+            return;
+        }
+
         int playerCenterX = game.playerX + game.playerSize / 2;
         int playerCenterY = game.playerY + game.playerSize / 2;
         int ghostCenterX = worldX + size / 2;
@@ -97,10 +115,10 @@ public class Ghost {
     }
 
     public void draw(Graphics2D graphics, int animationFrame) {
+        if (!game.isOnScreen(worldX, worldY, size, size)) return;
+
         int screenX = worldX - game.playerX + game.playerScreenX;
         int screenY = worldY - game.playerY + game.playerScreenY + (int) (Math.sin(animationFrame * 0.12 + worldX) * 3);
-
-        if (!game.isOnScreen(worldX, worldY, size, size)) return;
 
         Color mist = new Color(111, 220, 255, 70);
         graphics.setColor(mist);

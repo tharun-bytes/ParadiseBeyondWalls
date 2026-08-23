@@ -22,27 +22,25 @@ public class LevelConfig {
                         "PARADISE // BEYOND WALLS",
                         "LEVEL 01 • THE FALLEN COURTYARD",
                         2,
-                        // Clean open coordinates away from building hitboxes:
-                        new int[][]{{14, 10}, {25, 14}, {15, 30}, {38, 16}, {30, 36}},
-                        new int[][]{{20, 15}, {15, 25}, {30, 20}}
+                        // Guaranteed wide open courtyards (no walls or buildings):
+                        new int[][]{{15, 12}, {30, 12}, {15, 28}, {30, 28}, {24, 20}},
+                        new int[][]{{18, 16}, {28, 24}, {20, 32}}
                 );
             case 2:
                 return new LevelConfig(
                         "WALL ROSE // INNER DEFENSE LINE",
                         "LEVEL 02 • THE BREACHED DISTRICT",
                         3,
-                        // Open pathway coordinates:
-                        new int[][]{{12, 12}, {25, 10}, {40, 15}, {14, 38}, {32, 28}, {22, 38}},
-                        new int[][]{{12, 18}, {25, 8}, {38, 25}, {18, 32}}
+                        new int[][]{{12, 14}, {38, 14}, {12, 28}, {38, 28}, {25, 16}, {25, 32}},
+                        new int[][]{{16, 16}, {32, 16}, {16, 32}, {32, 32}}
                 );
             case 3:
                 return new LevelConfig(
                         "WALL SINA // THE ROYAL CITADEL",
                         "LEVEL 03 • THE SANCTUARY GATE",
                         4,
-                        // Strategic central courtyard spots:
-                        new int[][]{{16, 16}, {32, 16}, {16, 32}, {32, 32}, {24, 24}, {24, 10}, {24, 40}},
-                        new int[][]{{10, 12}, {40, 12}, {10, 38}, {40, 38}, {25, 18}}
+                        new int[][]{{14, 14}, {34, 14}, {14, 34}, {34, 34}, {24, 24}, {24, 12}, {24, 36}},
+                        new int[][]{{18, 18}, {30, 18}, {18, 30}, {30, 30}, {24, 16}}
                 );
             default:
                 return forNumber(1);
