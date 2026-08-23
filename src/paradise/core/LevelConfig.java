@@ -1,16 +1,15 @@
 package paradise.core;
 
-/** Immutable content for one playable level. Coordinates are map tiles. */
-public final class LevelConfig {
-    public final int number;
-    public final String title;
+public class LevelConfig {
+    public final String levelName;
+    public final String subTitle;
     public final int ghostSpeed;
     public final int[][] pointTiles;
     public final int[][] ghostTiles;
 
-    private LevelConfig(int number, String title, int ghostSpeed, int[][] pointTiles, int[][] ghostTiles) {
-        this.number = number;
-        this.title = title;
+    public LevelConfig(String levelName, String subTitle, int ghostSpeed, int[][] pointTiles, int[][] ghostTiles) {
+        this.levelName = levelName;
+        this.subTitle = subTitle;
         this.ghostSpeed = ghostSpeed;
         this.pointTiles = pointTiles;
         this.ghostTiles = ghostTiles;
@@ -19,22 +18,34 @@ public final class LevelConfig {
     public static LevelConfig forNumber(int level) {
         switch (level) {
             case 1:
-                return new LevelConfig(1, "The Fallen Courtyard", 2,
-                        // Spread wide across the map, but safely dodging the buildings!
-                        new int[][] {{15, 18}, {32, 18}, {25, 44}, {18, 32}, {32, 32}},
-                        new int[][] {{12, 12}, {38, 38}});
+                return new LevelConfig(
+                        "PARADISE // BEYOND WALLS",
+                        "LEVEL 01 • THE FALLEN COURTYARD",
+                        2,
+                        // Clean open coordinates away from building hitboxes:
+                        new int[][]{{14, 10}, {25, 14}, {15, 30}, {38, 16}, {30, 36}},
+                        new int[][]{{20, 15}, {15, 25}, {30, 20}}
+                );
             case 2:
-                return new LevelConfig(2, "The Shattered District", 3,
-                        // 7 points scattered in a wide ring
-                        new int[][] {{16, 16}, {33, 16}, {25, 18}, {18, 25}, {32, 25}, {16, 38}, {33, 38}},
-                        new int[][] {{10, 10}, {40, 10}, {25, 40}});
+                return new LevelConfig(
+                        "WALL ROSE // INNER DEFENSE LINE",
+                        "LEVEL 02 • THE BREACHED DISTRICT",
+                        3,
+                        // Open pathway coordinates:
+                        new int[][]{{12, 12}, {25, 10}, {40, 15}, {14, 38}, {32, 28}, {22, 38}},
+                        new int[][]{{12, 18}, {25, 8}, {38, 25}, {18, 32}}
+                );
             case 3:
-                return new LevelConfig(3, "Beyond the Last Wall", 4,
-                        // 10 points pushed to the absolute edges of the map
-                        new int[][] {{14, 18}, {20, 18}, {28, 18}, {35, 18}, {14, 32}, {35, 32}, {18, 42}, {25, 42}, {32, 42}, {25, 25}},
-                        new int[][] {{12, 12}, {38, 12}, {12, 38}, {38, 38}});
+                return new LevelConfig(
+                        "WALL SINA // THE ROYAL CITADEL",
+                        "LEVEL 03 • THE SANCTUARY GATE",
+                        4,
+                        // Strategic central courtyard spots:
+                        new int[][]{{16, 16}, {32, 16}, {16, 32}, {32, 32}, {24, 24}, {24, 10}, {24, 40}},
+                        new int[][]{{10, 12}, {40, 12}, {10, 38}, {40, 38}, {25, 18}}
+                );
             default:
-                throw new IllegalArgumentException("Unknown level: " + level);
+                return forNumber(1);
         }
     }
 }

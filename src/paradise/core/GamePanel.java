@@ -12,6 +12,7 @@ import paradise.world.TileManager;
 import javax.swing.JPanel;
 import java.awt.Color;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -38,7 +39,16 @@ public class GamePanel extends JPanel implements Runnable {
     public final int worldHeight = tileSize * maxWorldRow;
     public final int playerScreenX = screenWidth / 2 - tileSize / 2;
     public final int playerScreenY = screenHeight / 2 - tileSize / 2;
+
+    // Hitbox size for collision
     public final int playerSize = 22;
+
+    // --- CHARACTER SPRITE SCALE SETTING (Adjust between 1 to 4) ---
+    public int characterScale = 2;
+
+    // --- HIDING / HOUSE MECHANIC ---
+    public boolean isHiding = false;
+    public Building currentNearbyBuilding = null;
 
     public final KeyHandler keyHandler = new KeyHandler();
     public final TileManager tileManager = new TileManager(this);
@@ -52,7 +62,6 @@ public class GamePanel extends JPanel implements Runnable {
 
     public boolean facingRight = true;
 
-    // --- UPDATED: Now holds 8 frames instead of 7! ---
     public BufferedImage[] playerRunImages = new BufferedImage[8];
 
     public int currentLevel;
@@ -82,11 +91,9 @@ public class GamePanel extends JPanel implements Runnable {
         try {
             BufferedImage spriteSheet = ImageIO.read(new File("src/paradise/entity/run1.png"));
 
-            // --- UPDATED: Divide by 8 for perfect slices! ---
             int frameWidth = spriteSheet.getWidth() / 8;
             int frameHeight = spriteSheet.getHeight();
 
-            // --- UPDATED: Loop 8 times! ---
             for (int i = 0; i < 8; i++) {
                 playerRunImages[i] = spriteSheet.getSubimage(i * frameWidth, 0, frameWidth, frameHeight);
             }
@@ -249,19 +256,69 @@ public class GamePanel extends JPanel implements Runnable {
             return;
         }
 
-        movePlayer();
-        if (hitCooldown > 0) hitCooldown--;
+        // Check if player is near any house
+        checkHouseProximity();
 
-        for (Ghost ghost : ghosts) {
-            ghost.update();
-            if (hitCooldown == 0 && playerTouches(ghost.worldX, ghost.worldY, ghost.size)) {
-                harmPlayer();
-                break;
+        // Handle 'E' press for entering/exiting house
+        if (keyHandler.consumeEPressed()) {
+            if (isHiding) {
+                isHiding = false;
+            } else if (currentNearbyBuilding != null) {
+                isHiding = true;
+                keyHandler.clearMovement();
+
+                // Auto-collect any capture point located inside or next to this building
+                collectPointsInsideBuilding(currentNearbyBuilding);
             }
         }
 
-        collectCapturePoints();
-        checkDoorTransition();
+        // Only allow movement and ghost interactions if not hiding inside a house
+        if (!isHiding) {
+            movePlayer();
+            if (hitCooldown > 0) hitCooldown--;
+
+            for (Ghost ghost : ghosts) {
+                ghost.update();
+                if (hitCooldown == 0 && playerTouches(ghost.worldX, ghost.worldY, ghost.size)) {
+                    harmPlayer();
+                    break;
+                }
+            }
+
+            collectCapturePoints();
+            checkDoorTransition();
+        }
+    }
+
+    private void checkHouseProximity() {
+        currentNearbyBuilding = null;
+        Rectangle playerBox = new Rectangle(playerX - 20, playerY - 20, playerSize + 40, playerSize + 40);
+
+        if (mapBuildings != null) {
+            for (Building b : mapBuildings) {
+                if (b != null) {
+                    Rectangle bBox = new Rectangle(b.worldX, b.worldY, b.drawWidth, b.drawHeight);
+                    if (bBox.intersects(playerBox)) {
+                        currentNearbyBuilding = b;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void collectPointsInsideBuilding(Building b) {
+        Rectangle buildingArea = new Rectangle(b.worldX - 20, b.worldY - 20, b.drawWidth + 40, b.drawHeight + 40);
+        for (int i = 0; i < capturePoints.length; i++) {
+            CapturePoint point = capturePoints[i];
+            if (point != null) {
+                Rectangle pointRect = new Rectangle(point.worldX, point.worldY, tileSize, tileSize);
+                if (buildingArea.intersects(pointRect)) {
+                    capturePoints[i] = null;
+                    capturedPoints++;
+                }
+            }
+        }
     }
 
     private void movePlayer() {
@@ -339,6 +396,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     public void restartGame() {
         playerHealth = 3;
+        isHiding = false;
         loadLevel(1);
     }
 
@@ -359,6 +417,7 @@ public class GamePanel extends JPanel implements Runnable {
         }
         movePlayerToSpawn();
         hitCooldown = 70;
+        isHiding = false;
         gameState = GameState.PLAYING;
         keyHandler.clearMovement();
     }
@@ -403,9 +462,31 @@ public class GamePanel extends JPanel implements Runnable {
             ghost.draw(graphics2D, animationFrame);
         }
 
-        drawPlayer(graphics2D);
+        // Only draw player when outside
+        if (!isHiding) {
+            drawPlayer(graphics2D);
+        }
+
+        // Draw interaction prompts
+        drawInteractionPrompt(graphics2D);
+
         ui.draw(graphics2D);
         graphics2D.dispose();
+    }
+
+    private void drawInteractionPrompt(Graphics2D g2) {
+        g2.setFont(new Font("Arial", Font.BOLD, 14));
+        if (isHiding) {
+            g2.setColor(new Color(0, 0, 0, 180));
+            g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
+            g2.setColor(Color.GREEN);
+            g2.drawString("HIDDEN: Press [E] to Exit", screenWidth / 2 - 90, screenHeight - 57);
+        } else if (currentNearbyBuilding != null) {
+            g2.setColor(new Color(0, 0, 0, 180));
+            g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
+            g2.setColor(Color.YELLOW);
+            g2.drawString("Press [E] to Hide in House", screenWidth / 2 - 95, screenHeight - 57);
+        }
     }
 
     private void drawPlayer(Graphics2D graphics) {
@@ -420,16 +501,14 @@ public class GamePanel extends JPanel implements Runnable {
             int currentFrame = 0;
 
             if (isMoving) {
-                // --- UPDATED: Loop through 8 frames! ---
                 currentFrame = (animationFrame / 6) % 8;
             }
 
             int originalWidth = playerRunImages[currentFrame].getWidth();
             int originalHeight = playerRunImages[currentFrame].getHeight();
 
-            int scale = 3;
-            int drawWidth = originalWidth * scale;
-            int drawHeight = originalHeight * scale;
+            int drawWidth = originalWidth * characterScale;
+            int drawHeight = originalHeight * characterScale;
 
             int drawX = x - (drawWidth - playerSize) / 2;
             int drawY = y - (drawHeight - playerSize) / 2;
