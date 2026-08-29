@@ -52,17 +52,23 @@ public class UI {
 
     private void drawIntegrity(Graphics2D g2) {
         g2.setColor(new Color(15, 25, 40, 220));
-        g2.fillRoundRect(gp.screenWidth - 140, 20, 120, 60, 12, 12);
+        g2.fillRoundRect(gp.screenWidth - 150, 20, 130, 80, 12, 12);
 
         g2.setColor(new Color(140, 170, 210));
         g2.setFont(new Font("SansSerif", Font.BOLD, 10));
-        g2.drawString("INTEGRITY", gp.screenWidth - 125, 40);
+        g2.drawString("INTEGRITY", gp.screenWidth - 135, 38);
 
-        // Draw Health Hearts
         g2.setColor(Color.RED);
         for (int i = 0; i < gp.playerHealth; i++) {
-            g2.drawString("❤", gp.screenWidth - 125 + (i * 20), 62);
+            g2.drawString("❤", gp.screenWidth - 135 + (i * 20), 55);
         }
+
+        g2.setColor(new Color(60, 70, 85));
+        g2.fillRoundRect(gp.screenWidth - 135, 66, 100, 8, 4, 4);
+
+        int currentBarWidth = (int) ((gp.currentStamina / (double) gp.maxStamina) * 100);
+        g2.setColor(new Color(0, 220, 255));
+        g2.fillRoundRect(gp.screenWidth - 135, 66, Math.max(0, currentBarWidth), 8, 4, 4);
     }
 
     private void drawMiniMap(Graphics2D g2) {
@@ -72,7 +78,6 @@ public class UI {
         int centerX = mapX + mapDiameter / 2;
         int centerY = mapY + mapDiameter / 2;
 
-        // Outer ambient glow ring
         g2.setColor(new Color(30, 60, 90, 140));
         g2.setStroke(new BasicStroke(4));
         g2.drawOval(mapX - 2, mapY - 2, mapDiameter + 4, mapDiameter + 4);
@@ -81,34 +86,28 @@ public class UI {
         java.awt.geom.Ellipse2D.Double circleClip = new java.awt.geom.Ellipse2D.Double(mapX, mapY, mapDiameter, mapDiameter);
         g2.setClip(circleClip);
 
-        // Circular background (Deep Sea)
         g2.setColor(new Color(20, 55, 95));
         g2.fillOval(mapX, mapY, mapDiameter, mapDiameter);
 
         double scale = (double) mapDiameter / (double) gp.worldWidth;
 
-        // 1. Draw Beach Sand (East Shore)
         g2.setColor(new Color(215, 185, 125));
         int beachX = mapX + (int) (42 * gp.tileSize * scale);
         g2.fillRect(beachX, mapY, mapDiameter - (beachX - mapX), mapDiameter);
 
-        // 2. Draw Inner Circular Green Courtyard
-        int wallPixelRadius = (int) (21.0 * gp.tileSize * scale);
+        int wallPixelRadius = (int) (20.0 * gp.tileSize * scale);
         g2.setColor(new Color(35, 75, 55));
         g2.fillOval(centerX - wallPixelRadius, centerY - wallPixelRadius, wallPixelRadius * 2, wallPixelRadius * 2);
 
-        // 3. Draw Circular Wall Ring
         g2.setColor(new Color(110, 115, 125));
         g2.setStroke(new BasicStroke(3));
         g2.drawOval(centerX - wallPixelRadius, centerY - wallPixelRadius, wallPixelRadius * 2, wallPixelRadius * 2);
 
-        // 4. Draw East Gate (Beach Entry) & West Gate (Clearance Exit)
         g2.setColor(new Color(230, 180, 80));
-        g2.fillRect(centerX + wallPixelRadius - 3, centerY - 3, 7, 7); // East Gate
+        g2.fillRect(centerX + wallPixelRadius - 3, centerY - 3, 7, 7);
         g2.setColor(new Color(46, 204, 113));
-        g2.fillRect(centerX - wallPixelRadius - 3, centerY - 3, 7, 7); // West Gate
+        g2.fillRect(centerX - wallPixelRadius - 3, centerY - 3, 7, 7);
 
-        // 5. Draw Buildings
         if (gp.mapBuildings != null) {
             g2.setColor(new Color(130, 130, 140));
             for (Building b : gp.mapBuildings) {
@@ -122,24 +121,20 @@ public class UI {
             }
         }
 
-        // 6. Animated Capture Points (Pulsing Glow)
         if (gp.capturePoints != null) {
             float pulse = (float) (Math.sin(gp.animationFrame * 0.1) * 2);
             for (CapturePoint cp : gp.capturePoints) {
                 if (cp != null) {
                     int px = mapX + (int) (cp.worldX * scale);
                     int py = mapY + (int) (cp.worldY * scale);
-
                     g2.setColor(new Color(255, 215, 0, 90));
                     g2.fillOval(px - (int) pulse, py - (int) pulse, 4 + (int) (pulse * 2), 4 + (int) (pulse * 2));
-
                     g2.setColor(Color.YELLOW);
                     g2.fillOval(px, py, 4, 4);
                 }
             }
         }
 
-        // 7. Ghosts
         if (gp.ghosts != null) {
             g2.setColor(new Color(255, 75, 75));
             for (Ghost ghost : gp.ghosts) {
@@ -151,33 +146,18 @@ public class UI {
             }
         }
 
-        // 8. Player with Animated Expanding Beacon Ring
         int playerDotX = mapX + (int) (gp.playerX * scale);
         int playerDotY = mapY + (int) (gp.playerY * scale);
-
-        int rippleSize = (gp.animationFrame % 40) / 3;
-        int rippleAlpha = Math.max(0, 180 - (rippleSize * 12));
-
-        if (gp.isHiding) {
-            g2.setColor(new Color(46, 204, 113, rippleAlpha));
-            g2.drawOval(playerDotX - rippleSize, playerDotY - rippleSize, 6 + (rippleSize * 2), 6 + (rippleSize * 2));
-            g2.setColor(new Color(46, 204, 113));
-        } else {
-            g2.setColor(new Color(0, 230, 255, rippleAlpha));
-            g2.drawOval(playerDotX - rippleSize, playerDotY - rippleSize, 6 + (rippleSize * 2), 6 + (rippleSize * 2));
-            g2.setColor(new Color(0, 230, 255));
-        }
+        if (gp.isHiding) g2.setColor(new Color(46, 204, 113));
+        else g2.setColor(new Color(0, 230, 255));
         g2.fillOval(playerDotX - 1, playerDotY - 1, 6, 6);
 
-        // Restore canvas clip
         g2.setClip(oldClip);
 
-        // Metallic Border
         g2.setColor(new Color(80, 150, 220, 220));
         g2.setStroke(new BasicStroke(2));
         g2.drawOval(mapX, mapY, mapDiameter, mapDiameter);
 
-        // Top Pill Badge
         g2.setColor(new Color(15, 25, 40, 240));
         g2.fillRoundRect(centerX - 22, mapY - 7, 44, 15, 7, 7);
         g2.setColor(new Color(100, 180, 255));

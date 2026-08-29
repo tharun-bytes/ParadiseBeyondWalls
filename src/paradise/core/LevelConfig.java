@@ -3,16 +3,16 @@ package paradise.core;
 public class LevelConfig {
     public final String levelName;
     public final String subTitle;
-    public final int ghostSpeed;
     public final int[][] pointTiles;
     public final int[][] ghostTiles;
+    public final int ghostSpeed;
 
-    public LevelConfig(String levelName, String subTitle, int ghostSpeed, int[][] pointTiles, int[][] ghostTiles) {
+    public LevelConfig(String levelName, String subTitle, int[][] pointTiles, int[][] ghostTiles, int ghostSpeed) {
         this.levelName = levelName;
         this.subTitle = subTitle;
-        this.ghostSpeed = ghostSpeed;
         this.pointTiles = pointTiles;
         this.ghostTiles = ghostTiles;
+        this.ghostSpeed = ghostSpeed;
     }
 
     public static LevelConfig forNumber(int level) {
@@ -21,29 +21,62 @@ public class LevelConfig {
                 return new LevelConfig(
                         "PARADISE // BEYOND WALLS",
                         "LEVEL 01 • THE FALLEN COURTYARD",
-                        2,
-                        // Guaranteed wide open courtyards (no walls or buildings):
-                        new int[][]{{15, 12}, {30, 12}, {15, 28}, {30, 28}, {24, 20}},
-                        new int[][]{{18, 16}, {28, 24}, {20, 32}}
+                        new int[][]{
+                                {25, 12}, // Center North Clearing
+                                {18, 25}, // Center West Clearing
+                                {32, 25}, // Center East Clearing
+                                {25, 38}, // Center South Clearing
+                                {25, 25}  // Central Plaza
+                        },
+                        new int[][]{
+                                {20, 15},
+                                {30, 35}
+                        },
+                        2
                 );
+
             case 2:
                 return new LevelConfig(
-                        "WALL ROSE // INNER DEFENSE LINE",
-                        "LEVEL 02 • THE BREACHED DISTRICT",
-                        3,
-                        new int[][]{{12, 14}, {38, 14}, {12, 28}, {38, 28}, {25, 16}, {25, 32}},
-                        new int[][]{{16, 16}, {32, 16}, {16, 32}, {32, 32}}
+                        "PARADISE // WALL ROSE",
+                        "LEVEL 02 • THE SHADOW PLAZA",
+                        new int[][]{
+                                {22, 12},
+                                {28, 12},
+                                {18, 25},
+                                {32, 25},
+                                {22, 38},
+                                {28, 38}
+                        },
+                        new int[][]{
+                                {18, 18},
+                                {32, 18},
+                                {25, 32}
+                        },
+                        3
                 );
+
             case 3:
-                return new LevelConfig(
-                        "WALL SINA // THE ROYAL CITADEL",
-                        "LEVEL 03 • THE SANCTUARY GATE",
-                        4,
-                        new int[][]{{14, 14}, {34, 14}, {14, 34}, {34, 34}, {24, 24}, {24, 12}, {24, 36}},
-                        new int[][]{{18, 18}, {30, 18}, {18, 30}, {30, 30}, {24, 16}}
-                );
             default:
-                return forNumber(1);
+                return new LevelConfig(
+                        "PARADISE // WALL SINA",
+                        "LEVEL 03 • THE INNER CITADEL",
+                        new int[][]{
+                                {25, 10},
+                                {16, 20},
+                                {34, 20},
+                                {16, 30},
+                                {34, 30},
+                                {25, 40},
+                                {25, 25}
+                        },
+                        new int[][]{
+                                {18, 15},
+                                {32, 15},
+                                {18, 35},
+                                {32, 35}
+                        },
+                        4
+                );
         }
     }
 }

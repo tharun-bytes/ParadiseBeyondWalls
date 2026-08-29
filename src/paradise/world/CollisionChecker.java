@@ -34,9 +34,6 @@ public class CollisionChecker {
 
     private boolean isWalkable(int col, int row) {
         int tileType = gp.tileManager.mapTileNum[col][row];
-        // Solid impassable tiles:
-        return tileType != TileManager.TILE_WALL
-                && tileType != TileManager.TILE_WATER
-                && tileType != TileManager.TILE_GATE_PILLAR;
+        return tileType != TileManager.TILE_WALL && tileType != TileManager.TILE_WATER;
     }
 }

@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Random;
 
-/** Owns the fixed-rate game loop and connects the game's small systems. */
 public class GamePanel extends JPanel implements Runnable {
     public static final int LEVEL_COUNT = 3;
 
@@ -40,13 +39,13 @@ public class GamePanel extends JPanel implements Runnable {
     public final int playerScreenX = screenWidth / 2 - tileSize / 2;
     public final int playerScreenY = screenHeight / 2 - tileSize / 2;
 
-    // Player collision hitbox
     public final int playerSize = 28;
-
-    // Sprite scale setting (2 = clean, balanced size)
     public int characterScale = 2;
 
-    // Hiding state
+    public final int maxStamina = 100;
+    public double currentStamina = 100;
+    public boolean isDashing = false;
+
     public boolean isHiding = false;
     public Building currentNearbyBuilding = null;
 
@@ -54,14 +53,14 @@ public class GamePanel extends JPanel implements Runnable {
     public final TileManager tileManager = new TileManager(this);
     public final CollisionChecker collisionChecker = new CollisionChecker(this);
     public final UI ui = new UI(this);
+    public final Sound sound = new Sound();
 
     public int playerX;
     public int playerY;
-    public final int playerSpeed = 4;
+    public final int baseSpeed = 4;
     public int playerHealth;
 
     public boolean facingRight = true;
-
     public BufferedImage[] playerRunImages = new BufferedImage[8];
 
     public int currentLevel;
@@ -92,13 +91,10 @@ public class GamePanel extends JPanel implements Runnable {
             BufferedImage spriteSheet = ImageIO.read(new File("src/paradise/entity/run1.png"));
             int frameWidth = spriteSheet.getWidth() / 8;
             int frameHeight = spriteSheet.getHeight();
-
             for (int i = 0; i < 8; i++) {
                 playerRunImages[i] = spriteSheet.getSubimage(i * frameWidth, 0, frameWidth, frameHeight);
             }
-        } catch (IOException e) {
-            System.out.println("Could not load run1.png from src/paradise/entity/ folder.");
-        }
+        } catch (IOException ignored) {}
 
         setupBuildings();
         setupTrees();
@@ -116,24 +112,8 @@ public class GamePanel extends JPanel implements Runnable {
         mapBuildings[6] = new Building(24 * tileSize, 30 * tileSize, 7);
     }
 
-    private final int[][] GREEN_MODELS = {
-            {0, 64}, {32, 64}, {128, 64}, {160, 64}, {192, 64}, {224, 64},
-            {0, 96}, {32, 96}, {96, 96}, {128, 96}, {160, 96}, {224, 96},
-            {0, 128}, {32, 128}, {64, 128}, {96, 128}, {128, 128}, {160, 128}, {192, 128}, {224, 128},
-            {0, 160}, {32, 160}, {64, 160}, {96, 160}, {128, 160}, {160, 160}, {192, 160}, {224, 160},
-            {0, 192}, {32, 192}, {96, 192}, {128, 192}, {160, 192}, {192, 192}, {224, 192}
-    };
-
-    private final int[][] SNOW_MODELS = {
-            {96, 224}, {128, 224}, {160, 224}, {192, 224}, {224, 224},
-            {0, 256}, {32, 256}, {64, 256}, {96, 256}, {128, 256}
-    };
-
-    private final int[][] GOLD_MODELS = {
-            {0, 0}, {32, 0}, {64, 0}, {96, 0}, {128, 0}, {160, 0}, {192, 0},
-            {0, 32}, {32, 32}, {64, 32}, {96, 32}, {128, 32}, {160, 32},
-            {64, 64}, {96, 64}, {64, 96}, {192, 96}
-    };
+    private final int[][] GREEN_MODELS = {{0, 64}, {32, 64}, {128, 64}, {160, 64}, {192, 64}};
+    private final int[][] SNOW_MODELS = {{96, 224}, {128, 224}, {160, 224}};
 
     private void setupTrees() {
         ArrayList<Tree> treeList = new ArrayList<>();
@@ -141,77 +121,49 @@ public class GamePanel extends JPanel implements Runnable {
         Random rand = new Random(42);
 
         class ForestHelper {
-            void plant(int col, int row, int[][] modelPool) {
-                if (col < 0 || col >= maxWorldCol || row < 0 || row >= maxWorldRow) return;
-                if (occupied[col][row]) return;
-
-                // Keep East Beach Gate and shore completely open
+            void plant(int col, int row, int[][] pool) {
+                if (col < 0 || col >= maxWorldCol || row < 0 || row >= maxWorldRow || occupied[col][row]) return;
                 if (col >= 38 && col <= 49 && row >= 21 && row <= 28) return;
-                // Keep West Exit Gate completely open
                 if (col >= 0 && col <= 9 && row >= 21 && row <= 28) return;
 
                 int treeX = col * tileSize;
                 int treeY = row * tileSize;
-
-                Rectangle treeBox = new Rectangle(treeX, treeY, tileSize, tileSize);
+                Rectangle tBox = new Rectangle(treeX, treeY, tileSize, tileSize);
                 if (mapBuildings != null) {
                     for (Building b : mapBuildings) {
-                        if (b != null) {
-                            Rectangle buildingBox = new Rectangle(b.worldX - 10, b.worldY - 10, b.drawWidth + 20, b.drawHeight + 20);
-                            if (buildingBox.intersects(treeBox)) {
-                                return;
-                            }
-                        }
+                        if (b != null && new Rectangle(b.worldX, b.worldY, b.drawWidth, b.drawHeight).intersects(tBox)) return;
                     }
                 }
-
                 occupied[col][row] = true;
-                int[] crop = modelPool[rand.nextInt(modelPool.length)];
+                int[] crop = pool[rand.nextInt(pool.length)];
                 treeList.add(new Tree(treeX, treeY, crop[0], crop[1]));
             }
 
-            void plantCluster(int startCol, int endCol, int startRow, int endRow, double density, int[][] modelPool) {
-                for (int c = startCol; c <= endCol; c++) {
-                    for (int r = startRow; r <= endRow; r++) {
-                        if (rand.nextDouble() < density) {
-                            plant(c, r, modelPool);
-                        }
+            void plantCluster(int sC, int eC, int sR, int eR, double d, int[][] pool) {
+                for (int c = sC; c <= eC; c++) {
+                    for (int r = sR; r <= eR; r++) {
+                        if (rand.nextDouble() < d) plant(c, r, pool);
                     }
                 }
             }
         }
 
-        ForestHelper forest = new ForestHelper();
-        forest.plantCluster(28, 38, 6, 16, 0.35, SNOW_MODELS);
-        forest.plantCluster(28, 38, 32, 42, 0.35, SNOW_MODELS);
-        forest.plantCluster(10, 20, 6, 16, 0.35, GREEN_MODELS);
-        forest.plantCluster(10, 20, 32, 42, 0.35, GREEN_MODELS);
-
-        for (int c = 12; c < 38; c++) {
-            for (int r = 12; r < 38; r++) {
-                if (rand.nextDouble() < 0.05) {
-                    forest.plant(c, r, GREEN_MODELS);
-                }
-            }
-        }
-
-        forest.plant(20, 20, GOLD_MODELS);
-        forest.plant(21, 20, GOLD_MODELS);
-        forest.plant(29, 21, GOLD_MODELS);
-        forest.plant(21, 30, GOLD_MODELS);
-        forest.plant(30, 29, GOLD_MODELS);
-
+        ForestHelper f = new ForestHelper();
+        f.plantCluster(28, 38, 6, 16, 0.35, SNOW_MODELS);
+        f.plantCluster(28, 38, 32, 42, 0.35, SNOW_MODELS);
+        f.plantCluster(10, 20, 6, 16, 0.35, GREEN_MODELS);
+        f.plantCluster(10, 20, 32, 42, 0.35, GREEN_MODELS);
         mapTrees = treeList.toArray(new Tree[0]);
     }
 
     public void startGameThread() {
-        gameThread = new Thread(this, "paradise-game-loop");
+        gameThread = new Thread(this, "game-loop");
         gameThread.start();
     }
 
     @Override
     public void run() {
-        final double drawInterval = 1_000_000_000.0 / FPS;
+        double drawInterval = 1_000_000_000.0 / FPS;
         double nextDrawTime = System.nanoTime();
 
         while (gameThread != null) {
@@ -222,8 +174,7 @@ public class GamePanel extends JPanel implements Runnable {
             if (waitMillis > 0) {
                 try {
                     Thread.sleep(waitMillis);
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
+                } catch (InterruptedException e) {
                     return;
                 }
             }
@@ -241,29 +192,28 @@ public class GamePanel extends JPanel implements Runnable {
         if (gameState == GameState.LEVEL_TRANSITION) {
             transitionTimer++;
             if (transitionTimer >= TRANSITION_DURATION) {
-                if (currentLevel == LEVEL_COUNT) {
-                    gameState = GameState.VICTORY;
-                } else {
-                    loadLevel(currentLevel + 1);
-                }
+                if (currentLevel == LEVEL_COUNT) gameState = GameState.VICTORY;
+                else loadLevel(currentLevel + 1);
             }
             return;
         }
 
-        // 1. Ghosts always update & patrol
+        if (keyHandler.shiftPressed && currentStamina > 0.8 && (keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed)) {
+            isDashing = true;
+            currentStamina = Math.max(0, currentStamina - 0.7);
+        } else {
+            isDashing = false;
+            currentStamina = Math.min(maxStamina, currentStamina + 0.35);
+        }
+
         if (ghosts != null) {
-            for (Ghost ghost : ghosts) {
-                if (ghost != null) {
-                    ghost.update();
-                }
-            }
+            for (Ghost g : ghosts) if (g != null) g.update();
         }
 
         if (hitCooldown > 0) hitCooldown--;
 
         checkHouseProximity();
 
-        // 2. Handle 'E' press to hide / exit house
         if (keyHandler.consumeEPressed()) {
             if (isHiding) {
                 isHiding = false;
@@ -273,7 +223,6 @@ public class GamePanel extends JPanel implements Runnable {
             }
         }
 
-        // 3. Process movement, ghost damage, and point collection when outside
         if (!isHiding) {
             movePlayer();
 
@@ -294,15 +243,11 @@ public class GamePanel extends JPanel implements Runnable {
     private void checkHouseProximity() {
         currentNearbyBuilding = null;
         Rectangle playerBox = new Rectangle(playerX - 10, playerY - 10, playerSize + 20, playerSize + 20);
-
         if (mapBuildings != null) {
             for (Building b : mapBuildings) {
-                if (b != null) {
-                    Rectangle bBox = new Rectangle(b.worldX, b.worldY, b.drawWidth, b.drawHeight);
-                    if (bBox.intersects(playerBox)) {
-                        currentNearbyBuilding = b;
-                        break;
-                    }
+                if (b != null && new Rectangle(b.worldX, b.worldY, b.drawWidth, b.drawHeight).intersects(playerBox)) {
+                    currentNearbyBuilding = b;
+                    break;
                 }
             }
         }
@@ -312,29 +257,23 @@ public class GamePanel extends JPanel implements Runnable {
         if (keyHandler.leftPressed) facingRight = false;
         if (keyHandler.rightPressed) facingRight = true;
 
-        int horizontal = (keyHandler.rightPressed ? playerSpeed : 0) - (keyHandler.leftPressed ? playerSpeed : 0);
-        int vertical = (keyHandler.downPressed ? playerSpeed : 0) - (keyHandler.upPressed ? playerSpeed : 0);
+        int speed = isDashing ? baseSpeed + 3 : baseSpeed;
+        int horizontal = (keyHandler.rightPressed ? speed : 0) - (keyHandler.leftPressed ? speed : 0);
+        int vertical = (keyHandler.downPressed ? speed : 0) - (keyHandler.upPressed ? speed : 0);
         tryMovePlayer(horizontal, 0);
         tryMovePlayer(0, vertical);
     }
 
     private void tryMovePlayer(int deltaX, int deltaY) {
         if (deltaX == 0 && deltaY == 0) return;
+        if (!collisionChecker.canMove(playerX, playerY, playerSize, playerSize, deltaX, deltaY)) return;
 
-        if (!collisionChecker.canMove(playerX, playerY, playerSize, playerSize, deltaX, deltaY)) {
-            return;
-        }
-
-        Rectangle futurePlayerBox = new Rectangle(playerX + deltaX, playerY + deltaY, playerSize, playerSize);
-
+        Rectangle futureBox = new Rectangle(playerX + deltaX, playerY + deltaY, playerSize, playerSize);
         if (mapBuildings != null) {
             for (Building b : mapBuildings) {
-                if (b != null && b.hitbox != null && b.hitbox.intersects(futurePlayerBox)) {
-                    return;
-                }
+                if (b != null && b.hitbox != null && b.hitbox.intersects(futureBox)) return;
             }
         }
-
         playerX += deltaX;
         playerY += deltaY;
     }
@@ -347,18 +286,13 @@ public class GamePanel extends JPanel implements Runnable {
 
     private void harmPlayer() {
         playerHealth--;
-        hitCooldown = 120; // 2 seconds of invulnerability
+        hitCooldown = 120;
+        sound.playSFX("damage");
 
         if (ghosts != null) {
-            for (Ghost ghost : ghosts) {
-                if (ghost != null) {
-                    ghost.resetToSpawn();
-                }
-            }
+            for (Ghost ghost : ghosts) if (ghost != null) ghost.resetToSpawn();
         }
-
         movePlayerToSpawn();
-
         if (playerHealth <= 0) {
             gameState = GameState.GAME_OVER;
             keyHandler.clearMovement();
@@ -367,15 +301,14 @@ public class GamePanel extends JPanel implements Runnable {
 
     private void collectCapturePoints() {
         Rectangle playerBox = new Rectangle(playerX, playerY, playerSize, playerSize);
-
         for (int i = 0; i < capturePoints.length; i++) {
             CapturePoint point = capturePoints[i];
             if (point == null) continue;
-
-            Rectangle pointBox = new Rectangle(point.worldX, point.worldY, tileSize, tileSize);
-            if (playerBox.intersects(pointBox)) {
+            Rectangle pBox = new Rectangle(point.worldX, point.worldY, tileSize, tileSize);
+            if (playerBox.intersects(pBox)) {
                 capturePoints[i] = null;
                 capturedPoints++;
+                sound.playSFX("pickup");
             }
         }
     }
@@ -384,11 +317,10 @@ public class GamePanel extends JPanel implements Runnable {
         if (capturedPoints == levelConfig.pointTiles.length) {
             int playerCol = (playerX + playerSize / 2) / tileSize;
             int playerRow = (playerY + playerSize / 2) / tileSize;
-
-            // Trigger level progression when stepping onto West Gate exit
             if (playerCol <= 4 && (playerRow >= 23 && playerRow <= 26)) {
                 gameState = GameState.LEVEL_TRANSITION;
                 transitionTimer = 0;
+                sound.playSFX("door");
                 keyHandler.clearMovement();
             }
         }
@@ -396,8 +328,30 @@ public class GamePanel extends JPanel implements Runnable {
 
     public void restartGame() {
         playerHealth = 3;
+        currentStamina = 100;
         isHiding = false;
+        sound.playMusic("bgm");
         loadLevel(1);
+    }
+
+    public boolean isTileFreeForCapture(int col, int row) {
+        if (col < 0 || col >= maxWorldCol || row < 0 || row >= maxWorldRow) return false;
+        int tileType = tileManager.mapTileNum[col][row];
+        if (tileType == TileManager.TILE_WATER || tileType == TileManager.TILE_WALL) {
+            return false;
+        }
+
+        int x = col * tileSize;
+        int y = row * tileSize;
+        Rectangle tileBox = new Rectangle(x, y, tileSize, tileSize);
+        if (mapBuildings != null) {
+            for (Building b : mapBuildings) {
+                if (b != null && b.hitbox != null && b.hitbox.intersects(tileBox)) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private void loadLevel(int level) {
@@ -405,16 +359,25 @@ public class GamePanel extends JPanel implements Runnable {
         levelConfig = LevelConfig.forNumber(level);
         tileManager.createLevelMap(level);
         capturedPoints = 0;
+
         capturePoints = new CapturePoint[levelConfig.pointTiles.length];
+        for (int i = 0; i < capturePoints.length; i++) {
+            int[] t = levelConfig.pointTiles[i];
+            int col = t[0];
+            int row = t[1];
+
+            while (!isTileFreeForCapture(col, row) && row < maxWorldRow - 2) {
+                row++;
+            }
+            capturePoints[i] = new CapturePoint(this, col, row);
+        }
+
         ghosts = new Ghost[levelConfig.ghostTiles.length];
-        for (int index = 0; index < capturePoints.length; index++) {
-            int[] tile = levelConfig.pointTiles[index];
-            capturePoints[index] = new CapturePoint(this, tile[0], tile[1]);
+        for (int i = 0; i < ghosts.length; i++) {
+            int[] t = levelConfig.ghostTiles[i];
+            ghosts[i] = new Ghost(this, t[0], t[1], levelConfig.ghostSpeed);
         }
-        for (int index = 0; index < ghosts.length; index++) {
-            int[] tile = levelConfig.ghostTiles[index];
-            ghosts[index] = new Ghost(this, tile[0], tile[1], levelConfig.ghostSpeed);
-        }
+
         movePlayerToSpawn();
         hitCooldown = 70;
         isHiding = false;
@@ -438,37 +401,33 @@ public class GamePanel extends JPanel implements Runnable {
     @Override
     protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
-        Graphics2D graphics2D = (Graphics2D) graphics.create();
-        graphics2D.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        Graphics2D g2 = (Graphics2D) graphics.create();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        tileManager.draw(graphics2D);
+        tileManager.draw(g2);
 
         if (mapBuildings != null) {
-            for (Building b : mapBuildings) {
-                if (b != null) b.draw(graphics2D, this);
-            }
+            for (Building b : mapBuildings) if (b != null) b.draw(g2, this);
         }
 
         if (mapTrees != null) {
-            for (Tree t : mapTrees) {
-                if (t != null) t.draw(graphics2D, this);
-            }
+            for (Tree t : mapTrees) if (t != null) t.draw(g2, this);
         }
 
         for (CapturePoint point : capturePoints) {
-            if (point != null) point.draw(graphics2D, this, animationFrame);
+            if (point != null) point.draw(g2, this, animationFrame);
         }
         for (Ghost ghost : ghosts) {
-            ghost.draw(graphics2D, animationFrame);
+            ghost.draw(g2, animationFrame);
         }
 
         if (!isHiding) {
-            drawPlayer(graphics2D);
+            drawPlayer(g2);
         }
 
-        drawInteractionPrompt(graphics2D);
-        ui.draw(graphics2D);
-        graphics2D.dispose();
+        drawInteractionPrompt(g2);
+        ui.draw(g2);
+        g2.dispose();
     }
 
     private void drawInteractionPrompt(Graphics2D g2) {
@@ -492,21 +451,19 @@ public class GamePanel extends JPanel implements Runnable {
 
         if (hitCooldown > 0 && (animationFrame / 6) % 2 == 0) return;
 
+        if (isDashing) {
+            graphics.setColor(new Color(0, 200, 255, 60));
+            graphics.fillOval(x - 4, y + 4, playerSize + 8, playerSize + 4);
+        }
+
         if (playerRunImages != null && playerRunImages[0] != null) {
-
             boolean isMoving = keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed;
-            int currentFrame = 0;
-
-            if (isMoving) {
-                currentFrame = (animationFrame / 6) % 8;
-            }
+            int currentFrame = isMoving ? (animationFrame / 5) % 8 : 0;
 
             int originalWidth = playerRunImages[currentFrame].getWidth();
             int originalHeight = playerRunImages[currentFrame].getHeight();
-
             int drawWidth = originalWidth * characterScale;
             int drawHeight = originalHeight * characterScale;
-
             int drawX = x - (drawWidth - playerSize) / 2;
             int drawY = y - (drawHeight - playerSize) / 2;
 
@@ -515,7 +472,6 @@ public class GamePanel extends JPanel implements Runnable {
             } else {
                 graphics.drawImage(playerRunImages[currentFrame], drawX + drawWidth, drawY, -drawWidth, drawHeight, null);
             }
-
         } else {
             graphics.setColor(Color.MAGENTA);
             graphics.fillRect(x, y, playerSize, playerSize);
