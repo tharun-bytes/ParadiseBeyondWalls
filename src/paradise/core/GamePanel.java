@@ -10,6 +10,7 @@ import paradise.world.CollisionChecker;
 import paradise.world.TileManager;
 
 import javax.swing.JPanel;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -49,6 +50,17 @@ public class GamePanel extends JPanel implements Runnable {
     public boolean isHiding = false;
     public Building currentNearbyBuilding = null;
 
+    // Cinematic Intro Variables
+    public boolean showStoryScreen = true;
+    private boolean voicePlayed = false;
+    private int storyTimer = 0;
+    private final int storyDuration = 3600; // 60 seconds total
+
+    // Pause Menu Variables
+    public boolean isPaused = false;
+    public int pauseCommandNum = 0;
+    private int pauseCooldown = 0;
+
     public final KeyHandler keyHandler = new KeyHandler();
     public final TileManager tileManager = new TileManager(this);
     public final CollisionChecker collisionChecker = new CollisionChecker(this);
@@ -60,8 +72,11 @@ public class GamePanel extends JPanel implements Runnable {
     public final int baseSpeed = 4;
     public int playerHealth;
 
-    public boolean facingRight = true;
-    public BufferedImage[] playerRunImages = new BufferedImage[8];
+    public String direction = "down";
+    public BufferedImage[] runUp = new BufferedImage[8];
+    public BufferedImage[] runDown = new BufferedImage[8];
+    public BufferedImage[] runLeft = new BufferedImage[8];
+    public BufferedImage[] runRight = new BufferedImage[8];
 
     public int currentLevel;
     public int capturedPoints;
@@ -73,6 +88,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     public Tree[] mapTrees;
     public Building[] mapBuildings;
+    public ArrayList<Firefly> fireflies = new ArrayList<>();
 
     private static final int FPS = 60;
     private static final int TRANSITION_DURATION = 95;
@@ -88,17 +104,28 @@ public class GamePanel extends JPanel implements Runnable {
         setFocusable(true);
 
         try {
-            BufferedImage spriteSheet = ImageIO.read(new File("src/paradise/entity/run1.png"));
-            int frameWidth = spriteSheet.getWidth() / 8;
-            int frameHeight = spriteSheet.getHeight();
-            for (int i = 0; i < 8; i++) {
-                playerRunImages[i] = spriteSheet.getSubimage(i * frameWidth, 0, frameWidth, frameHeight);
-            }
-        } catch (IOException ignored) {}
+            runDown = loadAndSlice("src/paradise/entity/run1.png");
+            runUp = loadAndSlice("src/paradise/entity/run4.png");
+            runRight = loadAndSlice("src/paradise/entity/run3.png");
+            runLeft = loadAndSlice("src/paradise/entity/run2.png");
+        } catch (IOException e) {
+            System.out.println("Could not load one or more directional run animations!");
+        }
 
         setupBuildings();
         setupTrees();
         restartGame();
+    }
+
+    private BufferedImage[] loadAndSlice(String filePath) throws IOException {
+        BufferedImage sheet = ImageIO.read(new File(filePath));
+        BufferedImage[] frames = new BufferedImage[8];
+        int frameWidth = sheet.getWidth() / 8;
+        int frameHeight = sheet.getHeight();
+        for (int i = 0; i < 8; i++) {
+            frames[i] = sheet.getSubimage(i * frameWidth, 0, frameWidth, frameHeight);
+        }
+        return frames;
     }
 
     private void setupBuildings() {
@@ -110,6 +137,17 @@ public class GamePanel extends JPanel implements Runnable {
         mapBuildings[4] = new Building(20 * tileSize, 18 * tileSize, 5);
         mapBuildings[5] = new Building(28 * tileSize, 18 * tileSize, 6);
         mapBuildings[6] = new Building(24 * tileSize, 30 * tileSize, 7);
+
+        fireflies.clear();
+        for (Building b : mapBuildings) {
+            if (b != null) {
+                int anchorX = b.worldX + (tileSize * 2);
+                int anchorY = b.worldY + (tileSize * 2);
+                for (int i = 0; i < 15; i++) {
+                    fireflies.add(new Firefly(anchorX, anchorY));
+                }
+            }
+        }
     }
 
     private final int[][] GREEN_MODELS = {{0, 64}, {32, 64}, {128, 64}, {160, 64}, {192, 64}};
@@ -182,6 +220,55 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     public void update() {
+        if (showStoryScreen) {
+            if (!voicePlayed) {
+                sound.playVoice("story_voice"); // Uses the trackable voice method
+                voicePlayed = true;
+            }
+
+            // SKIP LOGIC: Press Enter or Escape to bypass story
+            if (keyHandler.consumeEnterPressed() || keyHandler.consumeEscapePressed()) {
+                showStoryScreen = false;
+                sound.stopVoice(); // Instantly kills the audio
+                keyHandler.clearMovement();
+                return;
+            }
+
+            storyTimer++;
+            if (storyTimer >= storyDuration) {
+                showStoryScreen = false;
+                keyHandler.clearMovement();
+            }
+            return;
+        }
+
+        // Pause Menu Logic
+        if (keyHandler.consumeEscapePressed()) {
+            isPaused = !isPaused;
+            if (isPaused) keyHandler.clearMovement(); // Prevent ghost-running
+        }
+
+        if (isPaused) {
+            if (keyHandler.upPressed && pauseCooldown == 0) {
+                pauseCommandNum = (pauseCommandNum == 0) ? 1 : 0;
+                pauseCooldown = 15;
+            }
+            if (keyHandler.downPressed && pauseCooldown == 0) {
+                pauseCommandNum = (pauseCommandNum == 1) ? 0 : 1;
+                pauseCooldown = 15;
+            }
+            if (pauseCooldown > 0) pauseCooldown--;
+
+            if (keyHandler.consumeEnterPressed()) {
+                if (pauseCommandNum == 0) {
+                    isPaused = false;
+                } else if (pauseCommandNum == 1) {
+                    System.exit(0);
+                }
+            }
+            return; // Exit update early to freeze the game
+        }
+
         animationFrame++;
 
         if (gameState == GameState.GAME_OVER || gameState == GameState.VICTORY) {
@@ -198,16 +285,27 @@ public class GamePanel extends JPanel implements Runnable {
             return;
         }
 
-        if (keyHandler.shiftPressed && currentStamina > 0.8 && (keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed)) {
+        boolean isMoving = keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed;
+
+        if (isMoving && keyHandler.shiftPressed && currentStamina > 0) {
             isDashing = true;
-            currentStamina = Math.max(0, currentStamina - 0.7);
+            currentStamina = Math.max(0, currentStamina - 0.5);
         } else {
             isDashing = false;
-            currentStamina = Math.min(maxStamina, currentStamina + 0.35);
+
+            if (isMoving) {
+                currentStamina = Math.min(maxStamina, currentStamina + 0.2);
+            } else {
+                currentStamina = Math.min(maxStamina, currentStamina + 0.6);
+            }
         }
 
         if (ghosts != null) {
             for (Ghost g : ghosts) if (g != null) g.update();
+        }
+
+        for (Firefly f : fireflies) {
+            f.update();
         }
 
         if (hitCooldown > 0) hitCooldown--;
@@ -254,10 +352,12 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void movePlayer() {
-        if (keyHandler.leftPressed) facingRight = false;
-        if (keyHandler.rightPressed) facingRight = true;
+        if (keyHandler.upPressed) direction = "up";
+        else if (keyHandler.downPressed) direction = "down";
+        else if (keyHandler.leftPressed) direction = "left";
+        else if (keyHandler.rightPressed) direction = "right";
 
-        int speed = isDashing ? baseSpeed + 3 : baseSpeed;
+        int speed = isDashing ? baseSpeed + 1 : baseSpeed - 1;
         int horizontal = (keyHandler.rightPressed ? speed : 0) - (keyHandler.leftPressed ? speed : 0);
         int vertical = (keyHandler.downPressed ? speed : 0) - (keyHandler.upPressed ? speed : 0);
         tryMovePlayer(horizontal, 0);
@@ -269,11 +369,13 @@ public class GamePanel extends JPanel implements Runnable {
         if (!collisionChecker.canMove(playerX, playerY, playerSize, playerSize, deltaX, deltaY)) return;
 
         Rectangle futureBox = new Rectangle(playerX + deltaX, playerY + deltaY, playerSize, playerSize);
+
         if (mapBuildings != null) {
             for (Building b : mapBuildings) {
                 if (b != null && b.hitbox != null && b.hitbox.intersects(futureBox)) return;
             }
         }
+
         playerX += deltaX;
         playerY += deltaY;
     }
@@ -388,7 +490,7 @@ public class GamePanel extends JPanel implements Runnable {
     private void movePlayerToSpawn() {
         playerX = 46 * tileSize;
         playerY = 25 * tileSize;
-        facingRight = false;
+        direction = "down";
     }
 
     public boolean isOnScreen(int worldX, int worldY, int width, int height) {
@@ -404,10 +506,20 @@ public class GamePanel extends JPanel implements Runnable {
         Graphics2D g2 = (Graphics2D) graphics.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+        if (showStoryScreen) {
+            drawStoryScreen(g2);
+            g2.dispose();
+            return;
+        }
+
         tileManager.draw(g2);
 
         if (mapBuildings != null) {
             for (Building b : mapBuildings) if (b != null) b.draw(g2, this);
+        }
+
+        for (Firefly f : fireflies) {
+            f.draw(g2, this);
         }
 
         if (mapTrees != null) {
@@ -427,7 +539,133 @@ public class GamePanel extends JPanel implements Runnable {
 
         drawInteractionPrompt(g2);
         ui.draw(g2);
+
+        drawStaminaBar(g2);
+
+        if (isPaused) {
+            drawPauseScreen(g2);
+        }
+
         g2.dispose();
+    }
+
+    private void drawPauseScreen(Graphics2D g2) {
+        g2.setColor(new Color(0, 0, 0, 180));
+        g2.fillRect(0, 0, screenWidth, screenHeight);
+
+        g2.setFont(new Font("Arial", Font.BOLD, 54));
+        g2.setColor(Color.WHITE);
+        String text = "PAUSED";
+        int x = screenWidth / 2 - g2.getFontMetrics().stringWidth(text) / 2;
+        int y = screenHeight / 2 - 80;
+        g2.drawString(text, x, y);
+
+        g2.setFont(new Font("Arial", Font.BOLD, 28));
+
+        text = "Resume";
+        x = screenWidth / 2 - g2.getFontMetrics().stringWidth(text) / 2;
+        y += 100;
+        g2.drawString(text, x, y);
+        if (pauseCommandNum == 0) {
+            g2.drawString(">", x - 30, y);
+        }
+
+        text = "Exit Game";
+        x = screenWidth / 2 - g2.getFontMetrics().stringWidth(text) / 2;
+        y += 50;
+        g2.drawString(text, x, y);
+        if (pauseCommandNum == 1) {
+            g2.drawString(">", x - 30, y);
+        }
+    }
+
+    private void drawStoryScreen(Graphics2D g2) {
+        // Phase 1: 55 Seconds of Story Lore synced with Audio
+        if (storyTimer < 3300) {
+            g2.setColor(Color.BLACK);
+            g2.fillRect(0, 0, screenWidth, screenHeight);
+
+            g2.setFont(new Font("Arial", Font.BOLD, 26));
+            g2.setColor(new Color(220, 220, 220));
+            g2.drawString("PARADISE BEYOND WALLS", screenWidth / 2 - 170, 80);
+
+            g2.setFont(new Font("Arial", Font.PLAIN, 18));
+            g2.setColor(Color.WHITE);
+
+            String[] storyLines = {
+                    "The expedition was supposed to be a one-way trip to salvation,",
+                    "a final desperate voyage to chart a fabled, untouched sanctuary",
+                    "known only as Paradise.",
+                    "",
+                    "But as your vessel breached the coordinates, a sudden squall of",
+                    "thick, glowing fog swallowed the ship. The crushing weight of",
+                    "the black waves tore the hull apart in seconds.",
+                    "",
+                    "You awaken choking on saltwater, washed ashore on a jagged",
+                    "coastline. The rest of your crew is nowhere to be found.",
+                    "",
+                    "This is not a sanctuary. It is an ancient containment zone,",
+                    "patrolled by restless, wandering phantoms that drain your life.",
+                    "",
+                    "Master your exhaustion, seek out the dormant energy monoliths,",
+                    "and unlock the heavy iron gates to escape this cursed prison."
+            };
+
+            int y = 140;
+            for (String line : storyLines) {
+                g2.drawString(line, 100, y);
+                y += 24;
+            }
+
+            // Draw Skip Prompt
+            g2.setFont(new Font("Arial", Font.BOLD, 14));
+            g2.setColor(new Color(100, 100, 100));
+            g2.drawString("Press [ENTER] to Skip", screenWidth - 180, screenHeight - 30);
+
+        }
+        // Phase 2: 5 Seconds of Nightmare Countdown
+        else {
+            g2.setColor(new Color(15, 0, 0)); // Dark red tint
+            g2.fillRect(0, 0, screenWidth, screenHeight);
+
+            int rightX = screenWidth / 2 - 140;
+            int rightY = screenHeight / 2 - 40;
+
+            g2.setFont(new Font("Arial", Font.BOLD, 30));
+            g2.setColor(new Color(200, 50, 50));
+            g2.drawString("READY FOR", rightX + 35, rightY);
+            g2.drawString("THE NIGHTMARE?", rightX - 15, rightY + 45);
+
+            int secondsLeft = (storyDuration - storyTimer) / 60;
+            g2.setFont(new Font("Arial", Font.ITALIC, 22));
+            g2.setColor(new Color(150, 150, 150));
+            g2.drawString("Begins in " + secondsLeft + "...", rightX + 50, rightY + 110);
+        }
+    }
+
+    private void drawStaminaBar(Graphics2D g2) {
+        int barWidth = 200;
+        int barHeight = 16;
+        int x = 20;
+        int y = screenHeight - 40;
+
+        g2.setFont(new Font("Arial", Font.BOLD, 12));
+        g2.setColor(Color.WHITE);
+        g2.drawString("STAMINA", x, y - 8);
+
+        g2.setColor(new Color(30, 30, 30, 200));
+        g2.fillRoundRect(x, y, barWidth, barHeight, 8, 8);
+
+        int fillWidth = (int) ((currentStamina / maxStamina) * barWidth);
+        if (currentStamina > 60) g2.setColor(new Color(40, 200, 255, 220));
+        else if (currentStamina > 25) g2.setColor(new Color(255, 200, 0, 220));
+        else g2.setColor(new Color(255, 50, 50, 220));
+
+        g2.fillRoundRect(x, y, fillWidth, barHeight, 8, 8);
+
+        g2.setColor(Color.WHITE);
+        g2.setStroke(new BasicStroke(2));
+        g2.drawRoundRect(x, y, barWidth, barHeight, 8, 8);
     }
 
     private void drawInteractionPrompt(Graphics2D g2) {
@@ -456,25 +694,100 @@ public class GamePanel extends JPanel implements Runnable {
             graphics.fillOval(x - 4, y + 4, playerSize + 8, playerSize + 4);
         }
 
-        if (playerRunImages != null && playerRunImages[0] != null) {
+        BufferedImage[] currentAnim = runDown;
+        boolean flipHorizontal = false;
+
+        switch(direction) {
+            case "up":
+                currentAnim = runUp;
+                break;
+            case "down":
+                currentAnim = runDown;
+                break;
+            case "right":
+                currentAnim = runRight;
+                break;
+            case "left":
+                currentAnim = runLeft;
+                flipHorizontal = false;
+                break;
+        }
+
+        if (currentAnim != null && currentAnim[0] != null) {
             boolean isMoving = keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed;
             int currentFrame = isMoving ? (animationFrame / 5) % 8 : 0;
 
-            int originalWidth = playerRunImages[currentFrame].getWidth();
-            int originalHeight = playerRunImages[currentFrame].getHeight();
+            int originalWidth = currentAnim[currentFrame].getWidth();
+            int originalHeight = currentAnim[currentFrame].getHeight();
             int drawWidth = originalWidth * characterScale;
             int drawHeight = originalHeight * characterScale;
             int drawX = x - (drawWidth - playerSize) / 2;
             int drawY = y - (drawHeight - playerSize) / 2;
 
-            if (facingRight) {
-                graphics.drawImage(playerRunImages[currentFrame], drawX, drawY, drawWidth, drawHeight, null);
+            if (!flipHorizontal) {
+                graphics.drawImage(currentAnim[currentFrame], drawX, drawY, drawWidth, drawHeight, null);
             } else {
-                graphics.drawImage(playerRunImages[currentFrame], drawX + drawWidth, drawY, -drawWidth, drawHeight, null);
+                graphics.drawImage(currentAnim[currentFrame], drawX + drawWidth, drawY, -drawWidth, drawHeight, null);
             }
         } else {
             graphics.setColor(Color.MAGENTA);
             graphics.fillRect(x, y, playerSize, playerSize);
+        }
+    }
+
+    public class Firefly {
+        double worldX, worldY;
+        double anchorX, anchorY;
+        double angle;
+        double speed;
+        int size;
+        float alpha;
+        float alphaSpeed;
+        boolean fadingIn;
+
+        public Firefly(int anchorX, int anchorY) {
+            this.anchorX = anchorX;
+            this.anchorY = anchorY;
+            this.worldX = anchorX + (Math.random() * 200 - 100);
+            this.worldY = anchorY + (Math.random() * 200 - 100);
+            this.angle = Math.random() * Math.PI * 2;
+            this.speed = 0.2 + Math.random() * 0.4;
+            this.size = 2 + (int)(Math.random() * 4);
+            this.alpha = (float)Math.random();
+            this.alphaSpeed = 0.005f + (float)(Math.random() * 0.01f);
+            this.fadingIn = Math.random() > 0.5;
+        }
+
+        public void update() {
+            worldX += Math.cos(angle) * speed;
+            worldY += Math.sin(angle) * speed;
+            angle += (Math.random() - 0.5) * 0.15;
+
+            double dist = Math.sqrt(Math.pow(worldX - anchorX, 2) + Math.pow(worldY - anchorY, 2));
+            if (dist > 150) {
+                angle += Math.PI;
+            }
+
+            if (fadingIn) {
+                alpha += alphaSpeed;
+                if (alpha >= 0.8f) { alpha = 0.8f; fadingIn = false; }
+            } else {
+                alpha -= alphaSpeed;
+                if (alpha <= 0.1f) { alpha = 0.1f; fadingIn = true; }
+            }
+        }
+
+        public void draw(Graphics2D g2, GamePanel gp) {
+            int screenX = (int)worldX - gp.playerX + gp.playerScreenX;
+            int screenY = (int)worldY - gp.playerY + gp.playerScreenY;
+
+            if (screenX > -10 && screenX < gp.screenWidth + 10 && screenY > -10 && screenY < gp.screenHeight + 10) {
+                g2.setColor(new Color(220, 255, 120, (int)(alpha * 255)));
+                g2.fillOval(screenX, screenY, size, size);
+
+                g2.setColor(new Color(200, 255, 100, (int)(alpha * 70)));
+                g2.fillOval(screenX - size, screenY - size, size * 3, size * 3);
+            }
         }
     }
 }

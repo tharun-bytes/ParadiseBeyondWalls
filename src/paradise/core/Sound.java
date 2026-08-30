@@ -10,6 +10,7 @@ public class Sound {
 
     private final Map<String, Object> soundSources = new HashMap<>();
     private Clip musicClip;
+    private Clip voiceClip; // Tracks the narrator so we can stop it
 
     public Sound() {
         findAndRegister("bgm", "bgm.wav");
@@ -19,10 +20,10 @@ public class Sound {
         findAndRegister("damage", "damage.wav");
         findAndRegister("dash", "dash.wav");
         findAndRegister("door", "door.wav");
+        findAndRegister("story_voice", "story_voice.wav");
     }
 
     private void findAndRegister(String key, String fileName) {
-        // Check multiple relative and absolute path locations
         String[] paths = {
                 "src/sound/" + fileName,
                 "src/paradise/sound/" + fileName,
@@ -41,7 +42,6 @@ public class Sound {
             }
         }
 
-        // Try classpath resources
         URL url = getClass().getResource("/sound/" + fileName);
         if (url == null) {
             url = getClass().getResource("/paradise/sound/" + fileName);
@@ -82,6 +82,25 @@ public class Sound {
         }).start();
     }
 
+    // NEW: Play voice on a trackable clip
+    public void playVoice(String key) {
+        new Thread(() -> {
+            voiceClip = createClip(key);
+            if (voiceClip != null) {
+                voiceClip.start();
+            }
+        }).start();
+    }
+
+    // NEW: Stop voice immediately if skipped
+    public void stopVoice() {
+        if (voiceClip != null) {
+            voiceClip.stop();
+            voiceClip.close();
+            voiceClip = null;
+        }
+    }
+
     private Clip createClip(String key) {
         Object source = soundSources.get(key);
         if (source == null) {
@@ -98,7 +117,6 @@ public class Sound {
             }
 
             AudioFormat baseFormat = in.getFormat();
-            // Automatically convert unsupported formats (24/32-bit, compressed) to 16-bit PCM
             AudioFormat decodedFormat = new AudioFormat(
                     AudioFormat.Encoding.PCM_SIGNED,
                     baseFormat.getSampleRate(),

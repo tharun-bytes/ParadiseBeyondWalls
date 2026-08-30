@@ -14,23 +14,20 @@ public class Tree {
     public BufferedImage image;
     public Rectangle hitbox;
 
-    // NEW: We now tell the tree exactly where to cut the sprite sheet!
     public Tree(int startX, int startY, int cropX, int cropY) {
         this.worldX = startX;
         this.worldY = startY;
 
         try {
             BufferedImage spriteSheet = ImageIO.read(new File("src/paradise/object/trees.png"));
-
-            // The scissors are now 32x32 (perfect for one tree)
-            // cropX and cropY will shift the scissors to different colors
+            // The scissors are 32x32 (perfect for one tree)
             image = spriteSheet.getSubimage(cropX, cropY, 32, 32);
 
         } catch (IOException e) {
             System.out.println("Could not load tree image!");
         }
 
-        // Hitbox adjusted for a smaller tree
+        // We leave the physical hitbox small so your player can still walk behind the giant canopy!
         this.hitbox = new Rectangle(worldX + 8, worldY + 16, 16, 16);
     }
 
@@ -39,8 +36,12 @@ public class Tree {
             int screenX = worldX - gp.playerX + gp.playerScreenX;
             int screenY = worldY - gp.playerY + gp.playerScreenY;
 
-            // We draw it at gp.tileSize (48x48) so it matches your map grid perfectly!
-            g2.drawImage(image, screenX, screenY, gp.tileSize, gp.tileSize, null);
+            // Shift left by half a tile and up by a full tile to keep the trunk planted exactly where it was
+            int drawX = screenX - (gp.tileSize / 2);
+            int drawY = screenY - gp.tileSize;
+
+            // Draw at double size (gp.tileSize * 2)
+            g2.drawImage(image, drawX, drawY, gp.tileSize * 2, gp.tileSize * 2, null);
         }
     }
 }
