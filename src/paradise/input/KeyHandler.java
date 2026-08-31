@@ -7,6 +7,7 @@ public class KeyHandler implements KeyListener {
     public boolean upPressed, downPressed, leftPressed, rightPressed;
     public boolean shiftPressed;
     public boolean ePressed;
+    public boolean fPressed;
     public boolean escapePressed;
     public boolean enterPressed;
     private boolean restartRequested;
@@ -23,6 +24,7 @@ public class KeyHandler implements KeyListener {
         if (code == KeyEvent.VK_D || code == KeyEvent.VK_RIGHT) rightPressed = true;
         if (code == KeyEvent.VK_SHIFT) shiftPressed = true;
         if (code == KeyEvent.VK_E) ePressed = true;
+        if (code == KeyEvent.VK_F) fPressed = true;
 
         // Pause menu keys
         if (code == KeyEvent.VK_ESCAPE) escapePressed = true;
@@ -40,6 +42,8 @@ public class KeyHandler implements KeyListener {
         if (code == KeyEvent.VK_A || code == KeyEvent.VK_LEFT) leftPressed = false;
         if (code == KeyEvent.VK_D || code == KeyEvent.VK_RIGHT) rightPressed = false;
         if (code == KeyEvent.VK_SHIFT) shiftPressed = false;
+        if (code == KeyEvent.VK_E) ePressed = false;
+        if (code == KeyEvent.VK_F) fPressed = false;
 
         if (code == KeyEvent.VK_ESCAPE) escapePressed = false;
         if (code == KeyEvent.VK_ENTER) enterPressed = false;
@@ -57,6 +61,12 @@ public class KeyHandler implements KeyListener {
         return p;
     }
 
+    public boolean consumeFPressed() {
+        boolean p = fPressed;
+        fPressed = false;
+        return p;
+    }
+
     public boolean consumeEscapePressed() {
         boolean p = escapePressed;
         escapePressed = false;
@@ -70,7 +80,7 @@ public class KeyHandler implements KeyListener {
     }
 
     public void clearMovement() {
-        upPressed = downPressed = leftPressed = rightPressed = shiftPressed = ePressed = false;
+        upPressed = downPressed = leftPressed = rightPressed = shiftPressed = ePressed = fPressed = false;
         escapePressed = enterPressed = false;
     }
 }

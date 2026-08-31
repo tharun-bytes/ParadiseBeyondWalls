@@ -50,11 +50,18 @@ public class GamePanel extends JPanel implements Runnable {
     public boolean isHiding = false;
     public Building currentNearbyBuilding = null;
 
+    // Lore Variables
+    public boolean isReadingLore = false;
+    public String currentLoreText = "";
+    public ArrayList<LoreNote> loreNotes = new ArrayList<>();
+    public LoreNote currentNearbyNote = null;
+
     // Cinematic Intro Variables
     public boolean showStoryScreen = true;
     private boolean voicePlayed = false;
     private int storyTimer = 0;
-    private final int storyDuration = 3600; // 60 seconds total
+    private final int storyDuration = 3600;
+    private BufferedImage darknessFilter;
 
     // Pause Menu Variables
     public boolean isPaused = false;
@@ -114,6 +121,8 @@ public class GamePanel extends JPanel implements Runnable {
 
         setupBuildings();
         setupTrees();
+        setupLoreNotes();
+        setupLighting();
         restartGame();
     }
 
@@ -148,6 +157,13 @@ public class GamePanel extends JPanel implements Runnable {
                 }
             }
         }
+    }
+
+    private void setupLoreNotes() {
+        loreNotes.clear();
+        loreNotes.add(new LoreNote(24 * tileSize, 16 * tileSize, "Expedition Log 01:\n\nThe fog rolled in faster than we could react.\nOur instruments are dead.\nSomething is moving in the trees."));
+        loreNotes.add(new LoreNote(34 * tileSize, 25 * tileSize, "Expedition Log 07:\n\nThey don't bleed. They don't breathe.\nThey just drain you until you're nothing but dust.\nDon't let them touch you."));
+        loreNotes.add(new LoreNote(15 * tileSize, 25 * tileSize, "Expedition Log 14:\n\nI've found the energy monoliths.\nIf I can capture them all, the central gate might open.\nI'm so tired..."));
     }
 
     private final int[][] GREEN_MODELS = {{0, 64}, {32, 64}, {128, 64}, {160, 64}, {192, 64}};
@@ -194,6 +210,34 @@ public class GamePanel extends JPanel implements Runnable {
         mapTrees = treeList.toArray(new Tree[0]);
     }
 
+    private void setupLighting() {
+        darknessFilter = new BufferedImage(screenWidth, screenHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g2 = (Graphics2D) darknessFilter.getGraphics();
+
+        Color fogColor = new Color(5, 15, 25, 245);
+        g2.setColor(fogColor);
+        g2.fillRect(0, 0, screenWidth, screenHeight);
+
+        int centerX = playerScreenX + (tileSize / 2);
+        int centerY = playerScreenY + (tileSize / 2);
+        int radius = 220;
+
+        java.awt.geom.Point2D center = new java.awt.geom.Point2D.Float(centerX, centerY);
+        float[] distance = {0.0f, 0.6f, 1.0f};
+        Color[] colors = {
+                new Color(0, 0, 0, 0),
+                new Color(0, 0, 0, 150),
+                fogColor
+        };
+
+        java.awt.RadialGradientPaint paint = new java.awt.RadialGradientPaint(center, radius, distance, colors);
+
+        g2.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC, 1f));
+        g2.setPaint(paint);
+        g2.fillOval(centerX - radius, centerY - radius, radius * 2, radius * 2);
+        g2.dispose();
+    }
+
     public void startGameThread() {
         gameThread = new Thread(this, "game-loop");
         gameThread.start();
@@ -222,18 +266,15 @@ public class GamePanel extends JPanel implements Runnable {
     public void update() {
         if (showStoryScreen) {
             if (!voicePlayed) {
-                sound.playVoice("story_voice"); // Uses the trackable voice method
+                sound.playVoice("story_voice");
                 voicePlayed = true;
             }
-
-            // SKIP LOGIC: Press Enter or Escape to bypass story
             if (keyHandler.consumeEnterPressed() || keyHandler.consumeEscapePressed()) {
                 showStoryScreen = false;
-                sound.stopVoice(); // Instantly kills the audio
+                sound.stopVoice();
                 keyHandler.clearMovement();
                 return;
             }
-
             storyTimer++;
             if (storyTimer >= storyDuration) {
                 showStoryScreen = false;
@@ -242,10 +283,16 @@ public class GamePanel extends JPanel implements Runnable {
             return;
         }
 
-        // Pause Menu Logic
+        if (isReadingLore) {
+            if (keyHandler.consumeEPressed() || keyHandler.consumeEnterPressed() || keyHandler.consumeEscapePressed()) {
+                isReadingLore = false;
+            }
+            return;
+        }
+
         if (keyHandler.consumeEscapePressed()) {
             isPaused = !isPaused;
-            if (isPaused) keyHandler.clearMovement(); // Prevent ghost-running
+            if (isPaused) keyHandler.clearMovement();
         }
 
         if (isPaused) {
@@ -266,7 +313,7 @@ public class GamePanel extends JPanel implements Runnable {
                     System.exit(0);
                 }
             }
-            return; // Exit update early to freeze the game
+            return;
         }
 
         animationFrame++;
@@ -292,29 +339,26 @@ public class GamePanel extends JPanel implements Runnable {
             currentStamina = Math.max(0, currentStamina - 0.5);
         } else {
             isDashing = false;
-
-            if (isMoving) {
-                currentStamina = Math.min(maxStamina, currentStamina + 0.2);
-            } else {
-                currentStamina = Math.min(maxStamina, currentStamina + 0.6);
-            }
+            if (isMoving) currentStamina = Math.min(maxStamina, currentStamina + 0.2);
+            else currentStamina = Math.min(maxStamina, currentStamina + 0.6);
         }
 
         if (ghosts != null) {
             for (Ghost g : ghosts) if (g != null) g.update();
         }
-
-        for (Firefly f : fireflies) {
-            f.update();
-        }
-
+        for (Firefly f : fireflies) f.update();
         if (hitCooldown > 0) hitCooldown--;
 
         checkHouseProximity();
+        checkLoreProximity();
 
         if (keyHandler.consumeEPressed()) {
             if (isHiding) {
                 isHiding = false;
+            } else if (currentNearbyNote != null) {
+                isReadingLore = true;
+                currentLoreText = currentNearbyNote.text;
+                keyHandler.clearMovement();
             } else if (currentNearbyBuilding != null) {
                 isHiding = true;
                 keyHandler.clearMovement();
@@ -332,9 +376,20 @@ public class GamePanel extends JPanel implements Runnable {
                     }
                 }
             }
-
             collectCapturePoints();
             checkDoorTransition();
+        }
+    }
+
+    private void checkLoreProximity() {
+        currentNearbyNote = null;
+        Rectangle playerBox = new Rectangle(playerX - 10, playerY - 10, playerSize + 20, playerSize + 20);
+        for (LoreNote note : loreNotes) {
+            Rectangle noteBox = new Rectangle(note.worldX, note.worldY, tileSize, tileSize);
+            if (playerBox.intersects(noteBox)) {
+                currentNearbyNote = note;
+                break;
+            }
         }
     }
 
@@ -369,13 +424,11 @@ public class GamePanel extends JPanel implements Runnable {
         if (!collisionChecker.canMove(playerX, playerY, playerSize, playerSize, deltaX, deltaY)) return;
 
         Rectangle futureBox = new Rectangle(playerX + deltaX, playerY + deltaY, playerSize, playerSize);
-
         if (mapBuildings != null) {
             for (Building b : mapBuildings) {
                 if (b != null && b.hitbox != null && b.hitbox.intersects(futureBox)) return;
             }
         }
-
         playerX += deltaX;
         playerY += deltaY;
     }
@@ -390,7 +443,6 @@ public class GamePanel extends JPanel implements Runnable {
         playerHealth--;
         hitCooldown = 120;
         sound.playSFX("damage");
-
         if (ghosts != null) {
             for (Ghost ghost : ghosts) if (ghost != null) ghost.resetToSpawn();
         }
@@ -467,10 +519,7 @@ public class GamePanel extends JPanel implements Runnable {
             int[] t = levelConfig.pointTiles[i];
             int col = t[0];
             int row = t[1];
-
-            while (!isTileFreeForCapture(col, row) && row < maxWorldRow - 2) {
-                row++;
-            }
+            while (!isTileFreeForCapture(col, row) && row < maxWorldRow - 2) row++;
             capturePoints[i] = new CapturePoint(this, col, row);
         }
 
@@ -518,10 +567,6 @@ public class GamePanel extends JPanel implements Runnable {
             for (Building b : mapBuildings) if (b != null) b.draw(g2, this);
         }
 
-        for (Firefly f : fireflies) {
-            f.draw(g2, this);
-        }
-
         if (mapTrees != null) {
             for (Tree t : mapTrees) if (t != null) t.draw(g2, this);
         }
@@ -529,6 +574,7 @@ public class GamePanel extends JPanel implements Runnable {
         for (CapturePoint point : capturePoints) {
             if (point != null) point.draw(g2, this, animationFrame);
         }
+
         for (Ghost ghost : ghosts) {
             ghost.draw(g2, animationFrame);
         }
@@ -537,16 +583,55 @@ public class GamePanel extends JPanel implements Runnable {
             drawPlayer(g2);
         }
 
-        drawInteractionPrompt(g2);
-        ui.draw(g2);
+        g2.drawImage(darknessFilter, 0, 0, null);
 
-        drawStaminaBar(g2);
-
-        if (isPaused) {
-            drawPauseScreen(g2);
+        for (LoreNote note : loreNotes) {
+            note.draw(g2, this);
         }
 
+        for (Firefly f : fireflies) {
+            f.draw(g2, this);
+        }
+
+        drawInteractionPrompt(g2);
+        ui.draw(g2);
+        drawStaminaBar(g2);
+
+        if (isPaused) drawPauseScreen(g2);
+        if (isReadingLore) drawLoreScreen(g2);
+
         g2.dispose();
+    }
+
+    private void drawLoreScreen(Graphics2D g2) {
+        g2.setColor(new Color(0, 0, 0, 180));
+        g2.fillRect(0, 0, screenWidth, screenHeight);
+
+        int boxX = screenWidth / 2 - 250;
+        int boxY = screenHeight / 2 - 150;
+        int boxW = 500;
+        int boxH = 300;
+
+        g2.setColor(new Color(240, 235, 210));
+        g2.fillRoundRect(boxX, boxY, boxW, boxH, 15, 15);
+
+        g2.setColor(new Color(60, 40, 20));
+        g2.setStroke(new BasicStroke(4));
+        g2.drawRoundRect(boxX, boxY, boxW, boxH, 15, 15);
+
+        g2.setFont(new Font("Serif", Font.ITALIC, 22));
+        g2.setColor(new Color(40, 30, 10));
+
+        String[] lines = currentLoreText.split("\n");
+        int textY = boxY + 60;
+        for (String line : lines) {
+            g2.drawString(line, boxX + 40, textY);
+            textY += 35;
+        }
+
+        g2.setFont(new Font("Arial", Font.BOLD, 14));
+        g2.setColor(new Color(150, 100, 50));
+        g2.drawString("Press [E] to Close", boxX + boxW - 150, boxY + boxH - 20);
     }
 
     private void drawPauseScreen(Graphics2D g2) {
@@ -561,26 +646,20 @@ public class GamePanel extends JPanel implements Runnable {
         g2.drawString(text, x, y);
 
         g2.setFont(new Font("Arial", Font.BOLD, 28));
-
         text = "Resume";
         x = screenWidth / 2 - g2.getFontMetrics().stringWidth(text) / 2;
         y += 100;
         g2.drawString(text, x, y);
-        if (pauseCommandNum == 0) {
-            g2.drawString(">", x - 30, y);
-        }
+        if (pauseCommandNum == 0) g2.drawString(">", x - 30, y);
 
         text = "Exit Game";
         x = screenWidth / 2 - g2.getFontMetrics().stringWidth(text) / 2;
         y += 50;
         g2.drawString(text, x, y);
-        if (pauseCommandNum == 1) {
-            g2.drawString(">", x - 30, y);
-        }
+        if (pauseCommandNum == 1) g2.drawString(">", x - 30, y);
     }
 
     private void drawStoryScreen(Graphics2D g2) {
-        // Phase 1: 55 Seconds of Story Lore synced with Audio
         if (storyTimer < 3300) {
             g2.setColor(Color.BLACK);
             g2.fillRect(0, 0, screenWidth, screenHeight);
@@ -617,15 +696,13 @@ public class GamePanel extends JPanel implements Runnable {
                 y += 24;
             }
 
-            // Draw Skip Prompt
             g2.setFont(new Font("Arial", Font.BOLD, 14));
             g2.setColor(new Color(100, 100, 100));
             g2.drawString("Press [ENTER] to Skip", screenWidth - 180, screenHeight - 30);
 
         }
-        // Phase 2: 5 Seconds of Nightmare Countdown
         else {
-            g2.setColor(new Color(15, 0, 0)); // Dark red tint
+            g2.setColor(new Color(15, 0, 0));
             g2.fillRect(0, 0, screenWidth, screenHeight);
 
             int rightX = screenWidth / 2 - 140;
@@ -675,6 +752,11 @@ public class GamePanel extends JPanel implements Runnable {
             g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
             g2.setColor(Color.GREEN);
             g2.drawString("HIDDEN: Press [E] to Exit", screenWidth / 2 - 90, screenHeight - 57);
+        } else if (currentNearbyNote != null) {
+            g2.setColor(new Color(0, 0, 0, 180));
+            g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
+            g2.setColor(new Color(255, 255, 150));
+            g2.drawString("Press [E] to Read Journal", screenWidth / 2 - 90, screenHeight - 57);
         } else if (currentNearbyBuilding != null) {
             g2.setColor(new Color(0, 0, 0, 180));
             g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
@@ -698,19 +780,10 @@ public class GamePanel extends JPanel implements Runnable {
         boolean flipHorizontal = false;
 
         switch(direction) {
-            case "up":
-                currentAnim = runUp;
-                break;
-            case "down":
-                currentAnim = runDown;
-                break;
-            case "right":
-                currentAnim = runRight;
-                break;
-            case "left":
-                currentAnim = runLeft;
-                flipHorizontal = false;
-                break;
+            case "up": currentAnim = runUp; break;
+            case "down": currentAnim = runDown; break;
+            case "right": currentAnim = runRight; break;
+            case "left": currentAnim = runLeft; flipHorizontal = false; break;
         }
 
         if (currentAnim != null && currentAnim[0] != null) {
@@ -735,19 +808,38 @@ public class GamePanel extends JPanel implements Runnable {
         }
     }
 
+    public class LoreNote {
+        int worldX, worldY;
+        String text;
+
+        public LoreNote(int x, int y, String text) {
+            this.worldX = x;
+            this.worldY = y;
+            this.text = text;
+        }
+
+        public void draw(Graphics2D g2, GamePanel gp) {
+            int screenX = worldX - gp.playerX + gp.playerScreenX;
+            int screenY = worldY - gp.playerY + gp.playerScreenY;
+
+            if (screenX > -tileSize && screenX < gp.screenWidth && screenY > -tileSize && screenY < gp.screenHeight) {
+                // Draw glowing paper
+                g2.setColor(new Color(255, 255, 200, 150));
+                g2.fillRoundRect(screenX + 16, screenY + 16, 16, 16, 4, 4);
+                g2.setColor(new Color(255, 255, 255));
+                g2.drawRoundRect(screenX + 16, screenY + 16, 16, 16, 4, 4);
+            }
+        }
+    }
+
     public class Firefly {
-        double worldX, worldY;
-        double anchorX, anchorY;
-        double angle;
-        double speed;
+        double worldX, worldY, anchorX, anchorY, angle, speed;
         int size;
-        float alpha;
-        float alphaSpeed;
+        float alpha, alphaSpeed;
         boolean fadingIn;
 
         public Firefly(int anchorX, int anchorY) {
-            this.anchorX = anchorX;
-            this.anchorY = anchorY;
+            this.anchorX = anchorX; this.anchorY = anchorY;
             this.worldX = anchorX + (Math.random() * 200 - 100);
             this.worldY = anchorY + (Math.random() * 200 - 100);
             this.angle = Math.random() * Math.PI * 2;
@@ -762,11 +854,8 @@ public class GamePanel extends JPanel implements Runnable {
             worldX += Math.cos(angle) * speed;
             worldY += Math.sin(angle) * speed;
             angle += (Math.random() - 0.5) * 0.15;
-
             double dist = Math.sqrt(Math.pow(worldX - anchorX, 2) + Math.pow(worldY - anchorY, 2));
-            if (dist > 150) {
-                angle += Math.PI;
-            }
+            if (dist > 150) angle += Math.PI;
 
             if (fadingIn) {
                 alpha += alphaSpeed;
@@ -784,7 +873,6 @@ public class GamePanel extends JPanel implements Runnable {
             if (screenX > -10 && screenX < gp.screenWidth + 10 && screenY > -10 && screenY < gp.screenHeight + 10) {
                 g2.setColor(new Color(220, 255, 120, (int)(alpha * 255)));
                 g2.fillOval(screenX, screenY, size, size);
-
                 g2.setColor(new Color(200, 255, 100, (int)(alpha * 70)));
                 g2.fillOval(screenX - size, screenY - size, size * 3, size * 3);
             }
