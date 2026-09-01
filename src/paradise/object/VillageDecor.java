@@ -5,6 +5,8 @@ import paradise.core.GamePanel;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.RadialGradientPaint;
+import java.awt.geom.Point2D;
 
 /**
  * Procedural village dressing: dirt paths, a central well, lamp posts, and small
@@ -80,7 +82,7 @@ public class VillageDecor {
         g2.drawLine(screenX - 4, screenY - 18, screenX + gp.tileSize + 4, screenY - 18);
     }
 
-    /** Glowing lamp posts along the paths. Draw AFTER buildings so they read as foreground props. */
+    /** Lamp posts (poles + bulb) only — the physical fixture. Draw AFTER buildings so they read as foreground props. */
     public static void drawLampPosts(Graphics2D g2, GamePanel gp, int animationFrame) {
         for (int[] lamp : LAMP_POSTS) {
             int worldX = lamp[0] * gp.tileSize;
@@ -89,14 +91,46 @@ public class VillageDecor {
             int screenX = worldX - gp.playerX + gp.playerScreenX + gp.tileSize / 2;
             int screenY = worldY - gp.playerY + gp.playerScreenY;
 
-            g2.setColor(new Color(60, 45, 35));
+            g2.setColor(new Color(45, 34, 26));
             g2.fillRect(screenX - 3, screenY - 20, 6, 30);
 
-            int flicker = (int) (Math.sin(animationFrame * 0.1 + lamp[0]) * 2);
-            g2.setColor(new Color(255, 210, 120, 70));
-            g2.fillOval(screenX - 16 - flicker, screenY - 34 - flicker, 32 + flicker * 2, 32 + flicker * 2);
-            g2.setColor(new Color(255, 230, 160));
+            double flicker = Math.sin(animationFrame * 0.1 + lamp[0]) * 0.5 + 0.5;
+            g2.setColor(new Color(255, 225, Math.min(255, 150 + (int) (flicker * 40))));
             g2.fillOval(screenX - 6, screenY - 24, 12, 12);
+            g2.setColor(new Color(90, 70, 45));
+            g2.drawOval(screenX - 6, screenY - 24, 12, 12);
+        }
+    }
+
+    /**
+     * The torch-light glow itself: a soft layered radial gradient at each lamp
+     * post, meant to be drawn AFTER the night overlay so the light visibly
+     * pools and cuts through the surrounding darkness instead of being dimmed
+     * by it.
+     */
+    public static void drawLampGlow(Graphics2D g2, GamePanel gp, int animationFrame) {
+        for (int[] lamp : LAMP_POSTS) {
+            int worldX = lamp[0] * gp.tileSize;
+            int worldY = lamp[1] * gp.tileSize;
+            if (!gp.isOnScreen(worldX, worldY, gp.tileSize * 3, gp.tileSize * 3)) continue;
+            int screenX = worldX - gp.playerX + gp.playerScreenX + gp.tileSize / 2;
+            int screenY = worldY - gp.playerY + gp.playerScreenY - 18;
+
+            double flicker = Math.sin(animationFrame * 0.1 + lamp[0]) * 0.5
+                    + Math.sin(animationFrame * 0.23 + lamp[1]) * 0.5;
+            float radius = (float) (58 + flicker * 6);
+
+            RadialGradientPaint glow = new RadialGradientPaint(
+                    new Point2D.Float(screenX, screenY), radius,
+                    new float[]{0f, 0.35f, 1f},
+                    new Color[]{
+                            new Color(255, 225, 150, 150),
+                            new Color(255, 190, 100, 70),
+                            new Color(255, 170, 80, 0)
+                    }
+            );
+            g2.setPaint(glow);
+            g2.fillOval((int) (screenX - radius), (int) (screenY - radius), (int) (radius * 2), (int) (radius * 2));
         }
     }
 

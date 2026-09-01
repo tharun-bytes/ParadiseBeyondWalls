@@ -1,6 +1,10 @@
 package paradise.core;
 
+<<<<<<< HEAD
+import paradise.effects.Fireflies;
+=======
 import paradise.effects.AmbientParticles;
+>>>>>>> 015ac1b9982e4947967e2876880e54e71eb73acf
 import paradise.entity.Ghost;
 import paradise.input.KeyHandler;
 import paradise.object.Building;
@@ -58,7 +62,11 @@ public class GamePanel extends JPanel implements Runnable {
     public final UI ui = new UI(this);
     public final Sound sound = new Sound();
     public final Sound se = new Sound();
+<<<<<<< HEAD
+    public final Fireflies fireflies = new Fireflies(this);
+=======
     public final AmbientParticles ambientParticles = new AmbientParticles(this);
+>>>>>>> 015ac1b9982e4947967e2876880e54e71eb73acf
 
     public int playerX;
     public int playerY;
@@ -66,8 +74,12 @@ public class GamePanel extends JPanel implements Runnable {
     public int playerHealth;
     public final int maxHealth = 3;
 
-    public boolean facingRight = true;
-    public BufferedImage[] playerRunImages = new BufferedImage[8];
+    // Updated Animation Variables
+    public String direction = "down";
+    public BufferedImage[] runDown = new BufferedImage[8];
+    public BufferedImage[] runLeft = new BufferedImage[8];
+    public BufferedImage[] runRight = new BufferedImage[8];
+    public BufferedImage[] runUp = new BufferedImage[8];
 
     public int currentLevel;
     public int capturedPoints;
@@ -90,24 +102,40 @@ public class GamePanel extends JPanel implements Runnable {
 
     public GamePanel() {
         setPreferredSize(new Dimension(screenWidth, screenHeight));
-        setBackground(new Color(10, 18, 31));
+        setBackground(new Color(4, 7, 16));
         setDoubleBuffered(true);
         addKeyListener(keyHandler);
         setFocusable(true);
 
-        try {
-            BufferedImage spriteSheet = ImageIO.read(new File("src/paradise/entity/run1.png"));
-            int frameWidth = spriteSheet.getWidth() / 8;
-            int frameHeight = spriteSheet.getHeight();
-            for (int i = 0; i < 8; i++) {
-                playerRunImages[i] = spriteSheet.getSubimage(i * frameWidth, 0, frameWidth, frameHeight);
-            }
-        } catch (IOException ignored) {}
+        loadPlayerImages();
 
         setupBuildings();
         setupTrees();
+        fireflies.init();
         restartGame();
         playMusic(0);
+    }
+
+    private void loadPlayerImages() {
+        runDown = loadSpriteSheet("src/paradise/entity/run1.png", 8);
+        runLeft = loadSpriteSheet("src/paradise/entity/run2.png", 8);
+        runRight = loadSpriteSheet("src/paradise/entity/run3.png", 8);
+        runUp = loadSpriteSheet("src/paradise/entity/run4.png", 8);
+    }
+
+    private BufferedImage[] loadSpriteSheet(String path, int frames) {
+        BufferedImage[] sprites = new BufferedImage[frames];
+        try {
+            BufferedImage sheet = ImageIO.read(new File(path));
+            int width = sheet.getWidth() / frames;
+            int height = sheet.getHeight();
+            for (int i = 0; i < frames; i++) {
+                sprites[i] = sheet.getSubimage(i * width, 0, width, height);
+            }
+        } catch (IOException e) {
+            System.out.println("Error loading: " + path);
+        }
+        return sprites;
     }
 
     public void playMusic(int i) {
@@ -127,7 +155,6 @@ public class GamePanel extends JPanel implements Runnable {
 
     private void setupBuildings() {
         mapBuildings = new Building[7];
-        // Arranged in a ring around the village plaza (center ~25,25) instead of scattered corners.
         mapBuildings[0] = new Building(21 * tileSize, 10 * tileSize, 1);
         mapBuildings[1] = new Building(32 * tileSize, 14 * tileSize, 2);
         mapBuildings[2] = new Building(36 * tileSize, 24 * tileSize, 3);
@@ -228,7 +255,6 @@ public class GamePanel extends JPanel implements Runnable {
             return;
         }
 
-        // Stamina logic
         if (keyHandler.shiftPressed && currentStamina > 0.8 && (keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed)) {
             isDashing = true;
             currentStamina = Math.max(0, currentStamina - 0.7);
@@ -270,6 +296,7 @@ public class GamePanel extends JPanel implements Runnable {
             checkDoorTransition();
         }
     }
+
     private void updatePauseMenu() {
         if (keyHandler.consumeEscPressed()) {
             gameState = GameState.PLAYING;
@@ -284,13 +311,13 @@ public class GamePanel extends JPanel implements Runnable {
         if (keyHandler.consumeEnterPressed()) {
             switch (pauseMenuIndex) {
                 case 0:
-                    gameState = GameState.PLAYING; // Resume
+                    gameState = GameState.PLAYING;
                     break;
                 case 1:
-                    restartGame(); // Restart
+                    restartGame();
                     break;
                 case 2:
-                    System.exit(0); // Quit
+                    System.exit(0);
                     break;
             }
         }
@@ -310,8 +337,10 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void movePlayer() {
-        if (keyHandler.leftPressed) facingRight = false;
-        if (keyHandler.rightPressed) facingRight = true;
+        if (keyHandler.upPressed) direction = "up";
+        if (keyHandler.downPressed) direction = "down";
+        if (keyHandler.leftPressed) direction = "left";
+        if (keyHandler.rightPressed) direction = "right";
 
         int speed = isDashing ? baseSpeed + 3 : baseSpeed;
         int horizontal = (keyHandler.rightPressed ? speed : 0) - (keyHandler.leftPressed ? speed : 0);
@@ -412,21 +441,20 @@ public class GamePanel extends JPanel implements Runnable {
         keyHandler.clearMovement();
     }
 
-    /** Finds the nearest tile to (col,row) that isn't inside a building, wall, or water. */
     private int[] findSafeCaptureTile(int col, int row) {
         if (isTileFreeForCapture(col, row)) return new int[]{col, row};
 
         for (int radius = 1; radius <= 12; radius++) {
             for (int dc = -radius; dc <= radius; dc++) {
                 for (int dr = -radius; dr <= radius; dr++) {
-                    if (Math.max(Math.abs(dc), Math.abs(dr)) != radius) continue; // only ring edge
+                    if (Math.max(Math.abs(dc), Math.abs(dr)) != radius) continue;
                     int c = col + dc;
                     int r = row + dr;
                     if (isTileFreeForCapture(c, r)) return new int[]{c, r};
                 }
             }
         }
-        return new int[]{col, row}; // fallback, shouldn't be reached
+        return new int[]{col, row};
     }
 
     private boolean isTileFreeForCapture(int col, int row) {
@@ -451,7 +479,7 @@ public class GamePanel extends JPanel implements Runnable {
     private void movePlayerToSpawn() {
         playerX = 46 * tileSize;
         playerY = 25 * tileSize;
-        facingRight = false;
+        direction = "down";
     }
 
     public boolean isOnScreen(int worldX, int worldY, int width, int height) {
@@ -467,7 +495,6 @@ public class GamePanel extends JPanel implements Runnable {
         Graphics2D g2 = (Graphics2D) graphics.create();
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
-        // 1. World & Objects
         tileManager.draw(g2);
         paradise.object.VillageDecor.drawPaths(g2, this);
         paradise.object.VillageDecor.drawWell(g2, this);
@@ -498,13 +525,25 @@ public class GamePanel extends JPanel implements Runnable {
             drawPlayer(g2);
         }
 
+<<<<<<< HEAD
+        drawNightOverlay(g2);
+        paradise.object.VillageDecor.drawLampGlow(g2, this, animationFrame);
+        fireflies.draw(g2);
+
+=======
         // 2. Ambient foreground atmosphere (drifting leaves/petals on the wind)
         ambientParticles.draw(g2);
 
         // 3. Clear UI Overlay (No dark filter)
+>>>>>>> 015ac1b9982e4947967e2876880e54e71eb73acf
         drawInteractionPrompt(g2);
         ui.draw(g2);
         g2.dispose();
+    }
+
+    private void drawNightOverlay(Graphics2D g2) {
+        g2.setColor(new Color(6, 9, 26, 145));
+        g2.fillRect(0, 0, screenWidth, screenHeight);
     }
 
     private void drawInteractionPrompt(Graphics2D g2) {
@@ -528,28 +567,30 @@ public class GamePanel extends JPanel implements Runnable {
 
         if (hitCooldown > 0 && (animationFrame / 6) % 2 == 0) return;
 
-        // Dashing ghost trail effect
         if (isDashing) {
             graphics.setColor(new Color(0, 200, 255, 60));
             graphics.fillOval(x - 4, y + 4, playerSize + 8, playerSize + 4);
         }
 
-        if (playerRunImages != null && playerRunImages[0] != null) {
-            boolean isMoving = keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed;
-            int currentFrame = isMoving ? (animationFrame / 5) % 8 : 0;
+        boolean isMoving = keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed;
+        int currentFrameIndex = isMoving ? (animationFrame / 5) % 8 : 0;
 
-            int originalWidth = playerRunImages[currentFrame].getWidth();
-            int originalHeight = playerRunImages[currentFrame].getHeight();
-            int drawWidth = originalWidth * characterScale;
-            int drawHeight = originalHeight * characterScale;
+        BufferedImage currentFrame = null;
+
+        switch (direction) {
+            case "up": currentFrame = runUp[currentFrameIndex]; break;
+            case "down": currentFrame = runDown[currentFrameIndex]; break;
+            case "left": currentFrame = runLeft[currentFrameIndex]; break;
+            case "right": currentFrame = runRight[currentFrameIndex]; break;
+        }
+
+        if (currentFrame != null) {
+            int drawWidth = currentFrame.getWidth() * characterScale;
+            int drawHeight = currentFrame.getHeight() * characterScale;
             int drawX = x - (drawWidth - playerSize) / 2;
             int drawY = y - (drawHeight - playerSize) / 2;
 
-            if (facingRight) {
-                graphics.drawImage(playerRunImages[currentFrame], drawX, drawY, drawWidth, drawHeight, null);
-            } else {
-                graphics.drawImage(playerRunImages[currentFrame], drawX + drawWidth, drawY, -drawWidth, drawHeight, null);
-            }
+            graphics.drawImage(currentFrame, drawX, drawY, drawWidth, drawHeight, null);
         } else {
             graphics.setColor(Color.MAGENTA);
             graphics.fillRect(x, y, playerSize, playerSize);
