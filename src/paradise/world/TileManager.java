@@ -1,6 +1,7 @@
 package paradise.world;
 
 import paradise.core.GamePanel;
+import paradise.core.LevelConfig;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
@@ -24,16 +25,21 @@ public class TileManager {
     }
 
     public void createLevelMap(int level) {
-        int centerX = gp.maxWorldCol / 2;
-        int centerY = gp.maxWorldRow / 2;
-        double wallRadius = 20.0;
+        LevelConfig cfg = gp.levelConfig;
+        int cols = (cfg != null) ? cfg.worldCols : gp.maxWorldCol;
+        int rows = (cfg != null) ? cfg.worldRows : gp.maxWorldRow;
+        double wallRadius = (cfg != null) ? cfg.wallRadius : 20.0;
+        mapTileNum = new int[cols][rows];
 
-        for (int col = 0; col < gp.maxWorldCol; col++) {
-            for (int row = 0; row < gp.maxWorldRow; row++) {
+        int centerX = cols / 2;
+        int centerY = rows / 2;
+
+        for (int col = 0; col < cols; col++) {
+            for (int row = 0; row < rows; row++) {
                 double distance = Math.hypot(col - centerX, row - centerY);
 
                 if (distance > wallRadius + 2.5) {
-                    if (col >= 41) {
+                    if (col >= centerX) {
                         mapTileNum[col][row] = TILE_SAND;
                     } else {
                         mapTileNum[col][row] = TILE_WATER;
@@ -48,25 +54,32 @@ public class TileManager {
             }
         }
 
-        // Keep east and west passages wide open with walkable sand tiles
-        for (int col = 40; col <= 48; col++) {
-            for (int row = 22; row <= 27; row++) {
-                mapTileNum[col][row] = TILE_SAND;
-            }
-        }
+        // West corridor (the escape gate side)
+        int westStart = (int) (centerX - wallRadius);
+        carveCorridor(westStart - 3, westStart + 5, centerY, cols, rows);
 
-        for (int col = 0; col <= 7; col++) {
-            for (int row = 22; row <= 27; row++) {
-                mapTileNum[col][row] = TILE_SAND;
+        // East corridor (beach side, player spawn)
+        int eastStart = (int) (centerX + wallRadius);
+        carveCorridor(eastStart - 5, eastStart + 7, centerY, cols, rows);
+    }
+
+    private void carveCorridor(int colFrom, int colTo, int centerY, int cols, int rows) {
+        for (int col = colFrom; col <= colTo; col++) {
+            for (int row = centerY - 4; row <= centerY + 3; row++) {
+                if (col >= 0 && col < cols && row >= 0 && row < rows) {
+                    mapTileNum[col][row] = TILE_SAND;
+                }
             }
         }
     }
 
     public void draw(Graphics2D g2) {
+        int cols = gp.maxWorldCol;
+        int rows = gp.maxWorldRow;
         int startCol = Math.max(0, (gp.playerX - gp.playerScreenX) / gp.tileSize);
-        int endCol = Math.min(gp.maxWorldCol, (gp.playerX + gp.playerScreenX + gp.tileSize) / gp.tileSize + 1);
+        int endCol = Math.min(cols, (gp.playerX + gp.playerScreenX + gp.tileSize) / gp.tileSize + 1);
         int startRow = Math.max(0, (gp.playerY - gp.playerScreenY) / gp.tileSize);
-        int endRow = Math.min(gp.maxWorldRow, (gp.playerY + gp.playerScreenY + gp.tileSize) / gp.tileSize + 1);
+        int endRow = Math.min(rows, (gp.playerY + gp.playerScreenY + gp.tileSize) / gp.tileSize + 1);
 
         for (int col = startCol; col < endCol; col++) {
             for (int row = startRow; row < endRow; row++) {

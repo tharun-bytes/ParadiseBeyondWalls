@@ -2,8 +2,11 @@ package paradise.entity;
 
 import paradise.core.GamePanel;
 
+import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.GradientPaint;
 import java.awt.Graphics2D;
+import java.awt.geom.Path2D;
 import java.util.Random;
 
 /** A wall-aware enemy that patrols until the player enters its sight range. */
@@ -22,6 +25,7 @@ public class Ghost {
     public int worldX;
     public int worldY;
     public final int size;
+    public boolean alive = true;
 
     public Ghost(GamePanel game, int startColumn, int startRow, int speed) {
         this.game = game;
@@ -39,6 +43,11 @@ public class Ghost {
         this.patrolTimer = 0;
         this.directionX = 0;
         this.directionY = 1;
+    }
+
+    /** Slain by the player's blade; stays dead for the rest of this level. */
+    public void kill() {
+        alive = false;
     }
 
     public void update() {
@@ -114,27 +123,51 @@ public class Ghost {
         return true;
     }
 
-    public void draw(Graphics2D graphics, int animationFrame) {
+    public void draw(Graphics2D g2, int animationFrame) {
         if (!game.isOnScreen(worldX, worldY, size, size)) return;
 
         int screenX = worldX - game.playerX + game.playerScreenX;
-        int screenY = worldY - game.playerY + game.playerScreenY + (int) (Math.sin(animationFrame * 0.12 + worldX) * 3);
+        int screenY = worldY - game.playerY + game.playerScreenY + (int) (Math.sin(animationFrame * 0.1 + worldX) * 3);
+        int top = screenY;
+        int bottom = screenY + size + 6;
+        int left = screenX;
+        int right = screenX + size;
+        int cx = screenX + size / 2;
 
-        Color mist = new Color(111, 220, 255, 70);
-        graphics.setColor(mist);
-        graphics.fillOval(screenX - 8, screenY + 9, size + 16, size + 16);
+        // Faint dread aura pooling beneath the robe
+        g2.setColor(new Color(90, 40, 120, 55));
+        g2.fillOval(left - 10, screenY + size / 3, size + 20, size + 14);
 
-        graphics.setColor(new Color(210, 248, 255));
-        graphics.fillRoundRect(screenX, screenY + 7, size, size - 5, 18, 18);
-        graphics.fillOval(screenX, screenY, size, size / 2 + 8);
+        // Robe silhouette: rounded hood tapering into a tattered, jagged hem
+        Path2D.Double robe = new Path2D.Double();
+        robe.moveTo(cx, top);
+        robe.curveTo(left - 4, top + size * 0.15, left - 2, top + size * 0.55, left + 4, bottom - 14);
+        int hemPoints = 5;
+        for (int i = 0; i <= hemPoints; i++) {
+            double t = (double) i / hemPoints;
+            double x = left + 4 + t * (size - 8);
+            double y = (i % 2 == 0) ? bottom : bottom - 12;
+            robe.lineTo(x, y);
+        }
+        robe.curveTo(right - 2, top + size * 0.55, right + 4, top + size * 0.15, cx, top);
+        robe.closePath();
 
-        graphics.setColor(new Color(38, 66, 100));
-        graphics.fillOval(screenX + 10, screenY + 17, 7, 9);
-        graphics.fillOval(screenX + size - 17, screenY + 17, 7, 9);
+        g2.setPaint(new GradientPaint(cx, top, new Color(78, 60, 102), cx, bottom, new Color(28, 20, 40)));
+        g2.fill(robe);
+        g2.setPaint(null);
 
-        graphics.setColor(new Color(79, 126, 158));
-        int[] x = {screenX, screenX + size / 4, screenX + size / 2, screenX + size * 3 / 4, screenX + size};
-        int[] y = {screenY + size - 2, screenY + size - 9, screenY + size - 2, screenY + size - 9, screenY + size - 2};
-        graphics.fillPolygon(x, y, 5);
+        g2.setColor(new Color(18, 12, 26));
+        g2.setStroke(new BasicStroke(1.5f));
+        g2.draw(robe);
+
+        // Shadowed hollow beneath the hood peak
+        g2.setColor(new Color(12, 8, 20, 170));
+        g2.fillOval(cx - size / 4, top + 4, size / 2, size / 3);
+
+        // Slowly pulsing eyes
+        float glow = (float) (0.5 + 0.5 * Math.sin(animationFrame * 0.15));
+        g2.setColor(new Color(150, 235, 255, (int) (180 + glow * 60)));
+        g2.fillOval(cx - size / 5, top + size / 3, 6, 8);
+        g2.fillOval(cx + size / 5 - 6, top + size / 3, 6, 8);
     }
 }

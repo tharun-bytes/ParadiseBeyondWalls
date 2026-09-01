@@ -7,6 +7,8 @@ public class KeyHandler implements KeyListener {
     public boolean upPressed, downPressed, leftPressed, rightPressed;
     public boolean shiftPressed;
     public boolean ePressed;
+    public boolean jPressed;
+    public boolean tPressed;
     private boolean restartRequested;
     private boolean escPressed;
     private boolean enterPressed;
@@ -24,6 +26,8 @@ public class KeyHandler implements KeyListener {
         if (code == KeyEvent.VK_D || code == KeyEvent.VK_RIGHT) rightPressed = true;
         if (code == KeyEvent.VK_SHIFT) shiftPressed = true;
         if (code == KeyEvent.VK_E) ePressed = true;
+        if (code == KeyEvent.VK_J) jPressed = true;
+        if (code == KeyEvent.VK_T) tPressed = true;
         if (code == KeyEvent.VK_ESCAPE) escPressed = true;
         if (code == KeyEvent.VK_SPACE || code == KeyEvent.VK_ENTER) enterPressed = true;
         if (code == KeyEvent.VK_SPACE || code == KeyEvent.VK_ENTER || code == KeyEvent.VK_R) restartRequested = true;
@@ -48,6 +52,18 @@ public class KeyHandler implements KeyListener {
     public boolean consumeEPressed() {
         boolean p = ePressed;
         ePressed = false;
+        return p;
+    }
+
+    public boolean consumeJPressed() {
+        boolean p = jPressed;
+        jPressed = false;
+        return p;
+    }
+
+    public boolean consumeTPressed() {
+        boolean p = tPressed;
+        tPressed = false;
         return p;
     }
 

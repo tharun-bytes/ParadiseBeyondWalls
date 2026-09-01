@@ -1,7 +1,9 @@
 package paradise.core;
 
 import paradise.effects.Fireflies;
+import paradise.entity.Boss;
 import paradise.entity.Ghost;
+import paradise.entity.NPC;
 import paradise.input.KeyHandler;
 import paradise.object.Building;
 import paradise.object.CapturePoint;
@@ -11,6 +13,7 @@ import paradise.world.CollisionChecker;
 import paradise.world.TileManager;
 
 import javax.swing.JPanel;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -18,6 +21,8 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.geom.Arc2D;
+import java.awt.geom.Path2D;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import java.io.File;
@@ -33,10 +38,10 @@ public class GamePanel extends JPanel implements Runnable {
     public final int maxScreenRow = 12;
     public final int screenWidth = tileSize * maxScreenCol;
     public final int screenHeight = tileSize * maxScreenRow;
-    public final int maxWorldCol = 50;
-    public final int maxWorldRow = 50;
-    public final int worldWidth = tileSize * maxWorldCol;
-    public final int worldHeight = tileSize * maxWorldRow;
+    public int maxWorldCol = 50;
+    public int maxWorldRow = 50;
+    public int worldWidth = tileSize * 50;
+    public int worldHeight = tileSize * 50;
     public final int playerScreenX = screenWidth / 2 - tileSize / 2;
     public final int playerScreenY = screenHeight / 2 - tileSize / 2;
 
@@ -75,6 +80,14 @@ public class GamePanel extends JPanel implements Runnable {
     public BufferedImage[] runRight = new BufferedImage[8];
     public BufferedImage[] runUp = new BufferedImage[8];
 
+    // Sword combat
+    public boolean hasSword;
+    public int swingTimer;
+    public int attackCooldown;
+    public static final int SWING_DURATION = 16;
+    public static final int ATTACK_COOLDOWN = 34;
+    private boolean enrageNotified;
+
     public int currentLevel;
     public int capturedPoints;
     public int animationFrame;
@@ -82,15 +95,24 @@ public class GamePanel extends JPanel implements Runnable {
     public LevelConfig levelConfig;
     public CapturePoint[] capturePoints;
     public Ghost[] ghosts;
+    public Boss boss;
+    public NPC npc;
 
     public Tree[] mapTrees;
     public Building[] mapBuildings;
+
+    // Dialogue / messages
+    public boolean dialogueActive;
+    public int dialogueIndex;
+    public String statusMessage = "";
+    public int statusMessageTimer;
+    public boolean doorLocked;
 
     private static final int FPS = 60;
     private static final int TRANSITION_DURATION = 95;
     private Thread gameThread;
     private int hitCooldown;
-    private int transitionTimer;
+    public int transitionTimer;
     public final String[] pauseMenuOptions = {"Resume", "Restart", "Quit"};
     public int pauseMenuIndex = 0;
 
@@ -103,9 +125,6 @@ public class GamePanel extends JPanel implements Runnable {
 
         loadPlayerImages();
 
-        setupBuildings();
-        setupTrees();
-        fireflies.init();
         restartGame();
         playMusic(0);
     }
@@ -147,31 +166,62 @@ public class GamePanel extends JPanel implements Runnable {
         se.play();
     }
 
-    private void setupBuildings() {
-        mapBuildings = new Building[7];
-        mapBuildings[0] = new Building(21 * tileSize, 10 * tileSize, 1);
-        mapBuildings[1] = new Building(32 * tileSize, 14 * tileSize, 2);
-        mapBuildings[2] = new Building(36 * tileSize, 24 * tileSize, 3);
-        mapBuildings[3] = new Building(30 * tileSize, 34 * tileSize, 4);
-        mapBuildings[4] = new Building(18 * tileSize, 34 * tileSize, 5);
-        mapBuildings[5] = new Building(8 * tileSize, 26 * tileSize, 6);
-        mapBuildings[6] = new Building(12 * tileSize, 14 * tileSize, 7);
-    }
-
     private final int[][] GREEN_MODELS = {{0, 64}, {32, 64}, {128, 64}, {160, 64}, {192, 64}};
     private final int[][] SNOW_MODELS = {{96, 224}, {128, 224}, {160, 224}};
     private final int[][] GOLD_MODELS = {{0, 0}, {32, 0}, {64, 0}};
 
-    private void setupTrees() {
+    private boolean isNearBossSpawn(int col, int row) {
+        if (levelConfig == null || levelConfig.boss == null) return false;
+        return Math.hypot(col - levelConfig.boss.spawnCol, row - levelConfig.boss.spawnRow) < 4;
+    }
+
+    private void setupBuildings(int level) {
+        if (level == 1) {
+            mapBuildings = new Building[7];
+            mapBuildings[0] = new Building(21 * tileSize, 10 * tileSize, 1);
+            mapBuildings[1] = new Building(32 * tileSize, 14 * tileSize, 2);
+            mapBuildings[2] = new Building(36 * tileSize, 24 * tileSize, 3);
+            mapBuildings[3] = new Building(30 * tileSize, 34 * tileSize, 4);
+            mapBuildings[4] = new Building(18 * tileSize, 34 * tileSize, 5);
+            mapBuildings[5] = new Building(8 * tileSize, 26 * tileSize, 6);
+            mapBuildings[6] = new Building(12 * tileSize, 14 * tileSize, 7);
+            return;
+        }
+
+        // Larger levels get a wider ring of houses around the plaza
+        int centerCol = levelConfig.worldCols / 2;
+        int centerRow = levelConfig.worldRows / 2;
+        int ringRadius = (int) Math.round(levelConfig.wallRadius * 0.5);
+        int houses = (level == 2) ? 10 : 12;
+        ArrayList<Building> list = new ArrayList<>();
+        for (int i = 0; i < houses; i++) {
+            double angle = 2 * Math.PI * i / houses - Math.PI / 2;
+            int col = centerCol + (int) Math.round(Math.cos(angle) * ringRadius);
+            int row = centerRow + (int) Math.round(Math.sin(angle) * ringRadius);
+            if (isNearBossSpawn(col, row)) continue;
+            list.add(new Building(col * tileSize, row * tileSize, 1 + (i % 7)));
+        }
+        mapBuildings = list.toArray(new Building[0]);
+    }
+
+    private void setupTrees(int level) {
         ArrayList<Tree> treeList = new ArrayList<>();
         boolean[][] occupied = new boolean[maxWorldCol][maxWorldRow];
-        Random rand = new Random(42);
+        Random rand = new Random(42 + level);
 
         class ForestHelper {
+            boolean inCorridor(int col, int row) {
+                int centerY = levelConfig.worldRows / 2;
+                if (row < centerY - 4 || row > centerY + 3) return false;
+                int west = (int) (levelConfig.worldCols / 2 - levelConfig.wallRadius);
+                int east = (int) (levelConfig.worldCols / 2 + levelConfig.wallRadius);
+                return (col >= west - 4 && col <= west + 6) || (col >= east - 6 && col <= east + 8);
+            }
+
             void plant(int col, int row, int[][] pool) {
                 if (col < 0 || col >= maxWorldCol || row < 0 || row >= maxWorldRow || occupied[col][row]) return;
-                if (col >= 38 && col <= 49 && row >= 21 && row <= 28) return;
-                if (col >= 0 && col <= 9 && row >= 21 && row <= 28) return;
+                if (inCorridor(col, row)) return;
+                if (isNearBossSpawn(col, row)) return;
 
                 int treeX = col * tileSize;
                 int treeY = row * tileSize;
@@ -193,13 +243,32 @@ public class GamePanel extends JPanel implements Runnable {
                     }
                 }
             }
+
+            void plantRing(double r0, double r1, double density, int[][] pool) {
+                int centerCol = levelConfig.worldCols / 2;
+                int centerRow = levelConfig.worldRows / 2;
+                for (int c = 1; c < maxWorldCol - 1; c++) {
+                    for (int r = 1; r < maxWorldRow - 1; r++) {
+                        double dist = Math.hypot(c - centerCol, r - centerRow);
+                        if (dist >= r0 && dist <= r1 && rand.nextDouble() < density) plant(c, r, pool);
+                    }
+                }
+            }
         }
 
         ForestHelper f = new ForestHelper();
-        f.plantCluster(28, 38, 6, 16, 0.35, SNOW_MODELS);
-        f.plantCluster(28, 38, 32, 42, 0.35, SNOW_MODELS);
-        f.plantCluster(10, 20, 6, 16, 0.35, GREEN_MODELS);
-        f.plantCluster(10, 20, 32, 42, 0.35, GREEN_MODELS);
+
+        if (level == 1) {
+            f.plantCluster(28, 38, 6, 16, 0.35, SNOW_MODELS);
+            f.plantCluster(28, 38, 32, 42, 0.35, SNOW_MODELS);
+            f.plantCluster(10, 20, 6, 16, 0.35, GREEN_MODELS);
+            f.plantCluster(10, 20, 32, 42, 0.35, GREEN_MODELS);
+        } else {
+            double wallR = levelConfig.wallRadius;
+            f.plantRing(0.55 * wallR, 0.9 * wallR, 0.20, SNOW_MODELS);
+            f.plantRing(0.55 * wallR, 0.9 * wallR, 0.15, GREEN_MODELS);
+            f.plantRing(0.25 * wallR, 0.42 * wallR, 0.06, GREEN_MODELS);
+        }
         mapTrees = treeList.toArray(new Tree[0]);
     }
 
@@ -243,12 +312,33 @@ public class GamePanel extends JPanel implements Runnable {
             return;
         }
 
+        if (gameState == GameState.LEVEL_TRANSITION) {
+            transitionTimer++;
+            if (transitionTimer >= TRANSITION_DURATION) advanceLevel();
+            return;
+        }
+
         if (gameState == GameState.GAME_OVER || gameState == GameState.VICTORY) {
             if (keyHandler.consumeRestartRequest()) restartGame();
             return;
         }
 
-        if (keyHandler.shiftPressed && currentStamina > 0.8 && (keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed)) {
+        if (dialogueActive) {
+            updateDialogue();
+            return;
+        }
+
+        if (statusMessageTimer > 0) statusMessageTimer--;
+
+        if (keyHandler.consumeTPressed() && npc != null && npc.nearPlayer(64)) {
+            dialogueActive = true;
+            dialogueIndex = 0;
+            keyHandler.clearMovement();
+            return;
+        }
+
+        boolean moving = isMoving();
+        if (keyHandler.shiftPressed && currentStamina > 0.8 && moving) {
             isDashing = true;
             currentStamina = Math.max(0, currentStamina - 0.7);
         } else {
@@ -256,9 +346,19 @@ public class GamePanel extends JPanel implements Runnable {
             currentStamina = Math.min(maxStamina, currentStamina + 0.35);
         }
 
-        if (ghosts != null) {
-            for (Ghost g : ghosts) if (g != null) g.update();
+        if (swingTimer > 0) swingTimer--;
+        if (attackCooldown > 0) attackCooldown--;
+        if (!isHiding && hasSword && swingTimer == 0 && attackCooldown == 0 && keyHandler.consumeJPressed()) {
+            swingTimer = SWING_DURATION;
+            attackCooldown = ATTACK_COOLDOWN;
+            playSE(3);
+            performSlash();
         }
+
+        if (ghosts != null) {
+            for (Ghost g : ghosts) if (g != null && g.alive) g.update();
+        }
+        if (boss != null) boss.update();
 
         if (hitCooldown > 0) hitCooldown--;
 
@@ -278,7 +378,7 @@ public class GamePanel extends JPanel implements Runnable {
 
             if (hitCooldown == 0 && ghosts != null) {
                 for (Ghost ghost : ghosts) {
-                    if (ghost != null && playerTouchesGhost(ghost)) {
+                    if (ghost != null && ghost.alive && playerTouchesGhost(ghost)) {
                         harmPlayer();
                         break;
                     }
@@ -286,8 +386,16 @@ public class GamePanel extends JPanel implements Runnable {
             }
 
             collectCapturePoints();
-            checkDoorTransition();
         }
+
+        doorLocked = (capturedPoints == levelConfig.pointTiles.length)
+                && levelConfig.boss != null && boss != null && boss.alive;
+
+        if (!isHiding) checkDoorTransition();
+    }
+
+    private boolean isMoving() {
+        return keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed;
     }
 
     private void updatePauseMenu() {
@@ -314,6 +422,63 @@ public class GamePanel extends JPanel implements Runnable {
                     break;
             }
         }
+    }
+
+    private void updateDialogue() {
+        if (keyHandler.consumeTPressed()) {
+            dialogueIndex++;
+            if (npc == null || dialogueIndex >= npc.lineCount()) {
+                dialogueActive = false;
+                dialogueIndex = 0;
+            }
+        }
+    }
+
+    private Rectangle slashBox() {
+        int reach = tileSize * 2;
+        int half = 28;
+        int centerX = playerX + playerSize / 2;
+        int centerY = playerY + playerSize / 2;
+        switch (direction) {
+            case "up":
+                return new Rectangle(centerX - half, centerY - playerSize / 2 - reach, half * 2, reach + playerSize / 2);
+            case "down":
+                return new Rectangle(centerX - half, centerY, half * 2, reach);
+            case "left":
+                return new Rectangle(centerX - playerSize / 2 - reach, centerY - half, reach + playerSize / 2, half * 2);
+            default:
+                return new Rectangle(centerX, centerY - half, reach, half * 2);
+        }
+    }
+
+    private void performSlash() {
+        Rectangle attackBox = slashBox();
+        if (ghosts != null) {
+            for (Ghost g : ghosts) {
+                if (g != null && g.alive) {
+                    Rectangle ghostBox = new Rectangle(g.worldX + 6, g.worldY + 6, g.size - 12, g.size - 12);
+                    if (attackBox.intersects(ghostBox)) {
+                        g.kill();
+                        playSE(1);
+                    }
+                }
+            }
+        }
+        if (boss != null && boss.alive && attackBox.intersects(boss.hitbox())) {
+            boss.takeDamage(1);
+            if (!boss.alive) {
+                playSE(1);
+                flashStatusMessage("THE WAY IS OPEN — ESCAPE THROUGH THE WEST GATE!");
+            } else if (!enrageNotified && boss.hp <= boss.maxHp / 2) {
+                enrageNotified = true;
+                flashStatusMessage("IT'S ENRAGED! STAY SHARP, SOLDIER!");
+            }
+        }
+    }
+
+    private void flashStatusMessage(String message) {
+        statusMessage = message;
+        statusMessageTimer = 160;
     }
 
     private void checkHouseProximity() {
@@ -352,6 +517,7 @@ public class GamePanel extends JPanel implements Runnable {
                 if (b != null && b.hitbox != null && b.hitbox.intersects(futureBox)) return;
             }
         }
+        if (boss != null && boss.alive && boss.hitbox().intersects(futureBox)) return;
         playerX += deltaX;
         playerY += deltaY;
     }
@@ -377,6 +543,25 @@ public class GamePanel extends JPanel implements Runnable {
         }
     }
 
+    public void harmPlayerFromBoss(int damage, int bossCenterX, int bossCenterY) {
+        if (hitCooldown > 0) return;
+        playerHealth -= damage;
+        hitCooldown = 120;
+        playSE(2);
+
+        int dx = playerX + playerSize / 2 - bossCenterX;
+        int dy = playerY + playerSize / 2 - bossCenterY;
+        int knockX = (dx == 0 ? 0 : dx > 0 ? tileSize : -tileSize);
+        int knockY = (dy == 0 ? 0 : dy > 0 ? tileSize : -tileSize);
+        tryMovePlayer(knockX, 0);
+        tryMovePlayer(0, knockY);
+
+        if (playerHealth <= 0) {
+            gameState = GameState.GAME_OVER;
+            keyHandler.clearMovement();
+        }
+    }
+
     private void collectCapturePoints() {
         Rectangle playerBox = new Rectangle(playerX, playerY, playerSize, playerSize);
         for (int i = 0; i < capturePoints.length; i++) {
@@ -392,15 +577,27 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void checkDoorTransition() {
-        if (capturedPoints == levelConfig.pointTiles.length) {
-            int playerCol = (playerX + playerSize / 2) / tileSize;
-            int playerRow = (playerY + playerSize / 2) / tileSize;
-            if (playerCol <= 4 && (playerRow >= 23 && playerRow <= 26)) {
-                gameState = GameState.LEVEL_TRANSITION;
-                transitionTimer = 0;
-                playSE(4);
-                keyHandler.clearMovement();
-            }
+        if (capturedPoints != levelConfig.pointTiles.length) return;
+        if (levelConfig.boss != null && boss != null && boss.alive) return;
+
+        int westStart = levelConfig.worldCols / 2 - (int) levelConfig.wallRadius;
+        int centerRow = levelConfig.worldRows / 2;
+        int playerCol = (playerX + playerSize / 2) / tileSize;
+        int playerRow = (playerY + playerSize / 2) / tileSize;
+        if (playerCol <= westStart + 3 && playerRow >= centerRow - 4 && playerRow <= centerRow + 3) {
+            gameState = GameState.LEVEL_TRANSITION;
+            transitionTimer = 0;
+            playSE(4);
+            keyHandler.clearMovement();
+        }
+    }
+
+    private void advanceLevel() {
+        if (currentLevel >= LEVEL_COUNT) {
+            gameState = GameState.VICTORY;
+            keyHandler.clearMovement();
+        } else {
+            loadLevel(currentLevel + 1);
         }
     }
 
@@ -414,19 +611,55 @@ public class GamePanel extends JPanel implements Runnable {
     private void loadLevel(int level) {
         currentLevel = level;
         levelConfig = LevelConfig.forNumber(level);
+        maxWorldCol = levelConfig.worldCols;
+        maxWorldRow = levelConfig.worldRows;
+        worldWidth = maxWorldCol * tileSize;
+        worldHeight = maxWorldRow * tileSize;
+
         tileManager.createLevelMap(level);
+        setupBuildings(level);
+        setupTrees(level);
+        fireflies.init();
+
         capturedPoints = 0;
         capturePoints = new CapturePoint[levelConfig.pointTiles.length];
-        ghosts = new Ghost[levelConfig.ghostTiles.length];
         for (int i = 0; i < capturePoints.length; i++) {
             int[] t = levelConfig.pointTiles[i];
             int[] safeTile = findSafeCaptureTile(t[0], t[1]);
             capturePoints[i] = new CapturePoint(this, safeTile[0], safeTile[1]);
         }
+
+        ghosts = new Ghost[levelConfig.ghostTiles.length];
         for (int i = 0; i < ghosts.length; i++) {
             int[] t = levelConfig.ghostTiles[i];
-            ghosts[i] = new Ghost(this, t[0], t[1], levelConfig.ghostSpeed);
+            int[] safeTile = findSafeCaptureTile(t[0], t[1]);
+            ghosts[i] = new Ghost(this, safeTile[0], safeTile[1], levelConfig.ghostSpeed);
         }
+
+        if (levelConfig.boss != null) {
+            int[] bs = findSafeCaptureTile(levelConfig.boss.spawnCol, levelConfig.boss.spawnRow);
+            boss = new Boss(this, bs[0], bs[1], levelConfig.boss.name,
+                    levelConfig.boss.hp, levelConfig.boss.speed, levelConfig.boss.damage);
+        } else {
+            boss = null;
+        }
+
+        if (levelConfig.npc != null) {
+            int[] ns = findSafeCaptureTile(levelConfig.npc.col, levelConfig.npc.row);
+            npc = new NPC(this, ns[0], ns[1], levelConfig.npc.name, levelConfig.npc.lines);
+        } else {
+            npc = null;
+        }
+
+        hasSword = levelConfig.hasSword;
+        swingTimer = 0;
+        attackCooldown = 0;
+        enrageNotified = false;
+        dialogueActive = false;
+        dialogueIndex = 0;
+        statusMessageTimer = 0;
+        doorLocked = false;
+
         movePlayerToSpawn();
         hitCooldown = 70;
         isHiding = false;
@@ -470,8 +703,11 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void movePlayerToSpawn() {
-        playerX = 46 * tileSize;
-        playerY = 25 * tileSize;
+        int centerCol = levelConfig.worldCols / 2;
+        int centerRow = levelConfig.worldRows / 2;
+        int east = centerCol + (int) levelConfig.wallRadius;
+        playerX = (east + 1) * tileSize;
+        playerY = centerRow * tileSize;
         direction = "down";
     }
 
@@ -511,11 +747,14 @@ public class GamePanel extends JPanel implements Runnable {
             if (point != null) point.draw(g2, this, animationFrame);
         }
         for (Ghost ghost : ghosts) {
-            ghost.draw(g2, animationFrame);
+            if (ghost != null && ghost.alive) ghost.draw(g2, animationFrame);
         }
+        if (boss != null) boss.draw(g2, animationFrame);
+        if (npc != null) npc.draw(g2, animationFrame);
 
         if (!isHiding) {
             drawPlayer(g2);
+            drawSword(g2);
         }
 
         drawNightOverlay(g2);
@@ -540,6 +779,11 @@ public class GamePanel extends JPanel implements Runnable {
             g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
             g2.setColor(Color.GREEN);
             g2.drawString("HIDDEN: Press [E] to Exit", screenWidth / 2 - 90, screenHeight - 57);
+        } else if (npc != null && npc.nearPlayer(64) && gameState == GameState.PLAYING) {
+            g2.setColor(new Color(0, 0, 0, 180));
+            g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
+            g2.setColor(new Color(120, 255, 170));
+            g2.drawString("Press [T] to Talk", screenWidth / 2 - 78, screenHeight - 57);
         } else if (currentNearbyBuilding != null) {
             g2.setColor(new Color(0, 0, 0, 180));
             g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
@@ -559,7 +803,7 @@ public class GamePanel extends JPanel implements Runnable {
             graphics.fillOval(x - 4, y + 4, playerSize + 8, playerSize + 4);
         }
 
-        boolean isMoving = keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed;
+        boolean isMoving = isMoving();
         int currentFrameIndex = isMoving ? (animationFrame / 5) % 8 : 0;
 
         BufferedImage currentFrame = null;
@@ -582,5 +826,61 @@ public class GamePanel extends JPanel implements Runnable {
             graphics.setColor(Color.MAGENTA);
             graphics.fillRect(x, y, playerSize, playerSize);
         }
+    }
+
+    private void drawSword(Graphics2D g2) {
+        if (!hasSword || isHiding) return;
+        int centerX = playerScreenX + tileSize / 2;
+        int centerY = playerScreenY + tileSize / 2;
+
+        if (swingTimer > 0) {
+            double progress = 1.0 - swingTimer / (double) SWING_DURATION;
+            double base = directionAngle();
+            double startAngle = base - Math.toRadians(65);
+            double sweep = Math.toRadians(115) * progress;
+            int reach = tileSize * 2;
+
+            Path2D.Double wedge = new Path2D.Double();
+            wedge.moveTo(centerX, centerY);
+            wedge.lineTo(centerX + Math.cos(startAngle) * reach, centerY + Math.sin(startAngle) * reach);
+            wedge.lineTo(centerX + Math.cos(startAngle + sweep) * reach, centerY + Math.sin(startAngle + sweep) * reach);
+            wedge.closePath();
+            g2.setColor(new Color(180, 240, 255, 65));
+            g2.fill(wedge);
+
+            g2.setColor(new Color(210, 250, 255, 220));
+            g2.setStroke(new BasicStroke(5, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            Arc2D.Double arc = new Arc2D.Double(
+                    centerX - reach, centerY - reach, reach * 2, reach * 2,
+                    Math.toDegrees(startAngle), Math.toDegrees(sweep), Arc2D.OPEN);
+            g2.draw(arc);
+
+            double tipAngle = startAngle + sweep;
+            int tipX = (int) (centerX + Math.cos(tipAngle) * reach);
+            int tipY = (int) (centerY + Math.sin(tipAngle) * reach);
+            drawBlade(g2, centerX, centerY, tipX, tipY);
+        } else {
+            drawBlade(g2, centerX, centerY,
+                    centerX + (int) (Math.cos(directionAngle()) * 42),
+                    centerY + (int) (Math.sin(directionAngle()) * 42));
+        }
+    }
+
+    private double directionAngle() {
+        switch (direction) {
+            case "up": return -Math.PI / 2;
+            case "left": return Math.PI;
+            case "right": return 0;
+            default: return Math.PI / 2;
+        }
+    }
+
+    private void drawBlade(Graphics2D g2, int x0, int y0, int x1, int y1) {
+        g2.setStroke(new BasicStroke(9, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.setColor(new Color(200, 215, 230));
+        g2.drawLine(x0, y0, x1, y1);
+        g2.setStroke(new BasicStroke(4, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g2.setColor(new Color(240, 250, 255));
+        g2.drawLine(x0, y0, x1, y1);
     }
 }

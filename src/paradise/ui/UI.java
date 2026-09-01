@@ -86,6 +86,11 @@ public class UI {
             drawHealth(g2);
             drawStamina(g2);
             drawMiniMap(g2);
+            drawBossBar(g2);
+            drawDoorLockHint(g2);
+            drawStatusMessage(g2);
+            if (gp.gameState == GameState.LEVEL_TRANSITION) drawTransition(g2);
+            if (gp.dialogueActive) drawDialogue(g2);
         } else if (gp.gameState == GameState.PAUSED) {
             drawPauseMenu(g2);
         } else if (gp.gameState == GameState.GAME_OVER) {
@@ -149,8 +154,9 @@ public class UI {
     }
 
     private void drawHeader(Graphics2D g2) {
+        int panelHeight = gp.hasSword ? 100 : 80;
         g2.setColor(new Color(15, 25, 40, 220));
-        g2.fillRoundRect(20, 20, 320, 80, 12, 12);
+        g2.fillRoundRect(20, 20, 320, panelHeight, 12, 12);
 
         g2.setColor(Color.WHITE);
         g2.setFont(new Font("SansSerif", Font.BOLD, 13));
@@ -165,6 +171,12 @@ public class UI {
         g2.setColor(new Color(255, 215, 0));
         int totalPoints = (gp.levelConfig != null) ? gp.levelConfig.pointTiles.length : 5;
         g2.drawString("CAPTURE POINTS: " + gp.capturedPoints + " / " + totalPoints, 35, 85);
+
+        if (gp.hasSword) {
+            g2.setColor(new Color(130, 240, 255));
+            g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+            g2.drawString("[J] BLADE READY — SWING TO SLAY", 35, 108);
+        }
     }
 
     private void drawHealth(Graphics2D g2) {
@@ -220,6 +232,131 @@ public class UI {
         g2.fillRoundRect(panelX + 14, panelY + 26, Math.max(0, currentBarWidth), 8, 4, 4);
     }
 
+    private void drawBossBar(Graphics2D g2) {
+        if (gp.boss == null || !gp.boss.alive) return;
+        int panelW = 360;
+        int panelH = 54;
+        int panelX = gp.screenWidth / 2 - panelW / 2;
+        int panelY = 18;
+
+        drawNinePatch(g2, panelTex, panelX, panelY, panelW, panelH, 4, 4, 4, 5);
+
+        g2.setColor(new Color(255, 190, 140));
+        g2.setFont(pixelFont(13f));
+        g2.drawString(gp.boss.getName(), panelX + 16, panelY + 22);
+
+        g2.setColor(new Color(230, 225, 218));
+        g2.setFont(pixelFont(10f));
+        g2.drawString(gp.boss.hp + " / " + gp.boss.maxHp, panelX + panelW - 90, panelY + 22);
+
+        int barX = panelX + 16;
+        int barY = panelY + 30;
+        int barW = panelW - 32;
+        int barH = 10;
+        g2.setColor(new Color(25, 18, 16));
+        g2.fillRoundRect(barX, barY, barW, barH, 5, 5);
+
+        int fill = (int) ((gp.boss.hp / (double) gp.boss.maxHp) * barW);
+        boolean enraged = gp.boss.hp <= gp.boss.maxHp / 2;
+        g2.setColor(enraged ? new Color(255, 95, 55) : new Color(205, 55, 45));
+        g2.fillRoundRect(barX, barY, Math.max(0, fill), barH, 5, 5);
+    }
+
+    private void drawDoorLockHint(Graphics2D g2) {
+        if (!gp.doorLocked || gp.boss == null || !gp.boss.alive) return;
+        String text = "THE " + gp.boss.getName().toUpperCase() + " BLOCKS THE WEST GATE — SLAY IT TO PASS";
+        g2.setFont(pixelFont(15f));
+        int w = g2.getFontMetrics().stringWidth(text) + 40;
+        int h = 36;
+        int x = gp.screenWidth / 2 - w / 2;
+        int y = gp.screenHeight - 130;
+
+        g2.setColor(new Color(40, 8, 8, 210));
+        g2.fillRoundRect(x, y, w, h, 10, 10);
+        g2.setColor(new Color(255, 120, 90));
+        g2.drawString(text, x + 20, y + 24);
+    }
+
+    private void drawStatusMessage(Graphics2D g2) {
+        if (gp.statusMessageTimer <= 0 || gp.statusMessage.isEmpty()) return;
+        int alpha = Math.min(255, gp.statusMessageTimer * 4);
+        g2.setFont(pixelFont(18f));
+        int w = g2.getFontMetrics().stringWidth(gp.statusMessage) + 48;
+        int h = 40;
+        int x = gp.screenWidth / 2 - w / 2;
+        int y = gp.screenHeight - 176;
+
+        g2.setColor(new Color(10, 14, 24, Math.min(215, alpha)));
+        g2.fillRoundRect(x, y, w, h, 12, 12);
+        g2.setColor(new Color(255, 220, 120, alpha));
+        g2.drawString(gp.statusMessage, x + 24, y + 27);
+    }
+
+    private void drawTransition(Graphics2D g2) {
+        g2.setColor(new Color(4, 7, 16, 175));
+        g2.fillRect(0, 0, gp.screenWidth, gp.screenHeight);
+
+        g2.setColor(new Color(255, 215, 90));
+        g2.setFont(pixelFont(34f));
+        String title = "THE WALL IS CLEARED";
+        int tw = g2.getFontMetrics().stringWidth(title);
+        g2.drawString(title, gp.screenWidth / 2 - tw / 2, gp.screenHeight / 2 - 16);
+
+        g2.setColor(Color.WHITE);
+        g2.setFont(pixelFont(14f));
+        String sub = "ASCENDING TO THE NEXT WALL...";
+        int sw2 = g2.getFontMetrics().stringWidth(sub);
+        g2.drawString(sub, gp.screenWidth / 2 - sw2 / 2, gp.screenHeight / 2 + 26);
+    }
+
+    private void drawDialogue(Graphics2D g2) {
+        if (gp.npc == null || !gp.dialogueActive) return;
+        String line = gp.npc.line(gp.dialogueIndex);
+
+        int boxW = gp.screenWidth - 60;
+        int boxH = 104;
+        int boxX = 30;
+        int boxY = gp.screenHeight - boxH - 22;
+
+        drawNinePatch(g2, panelTex, boxX, boxY, boxW, boxH, 6, 6, 6, 8);
+        g2.setColor(new Color(0, 0, 0, 70));
+        g2.fillRoundRect(boxX + 8, boxY + 8, boxW - 16, boxH - 16, 8, 8);
+
+        g2.setColor(new Color(255, 200, 90));
+        g2.setFont(pixelFont(15f));
+        g2.drawString(gp.npc.name, boxX + 22, boxY + 26);
+
+        g2.setColor(new Color(240, 235, 225));
+        g2.setFont(pixelFont(14f));
+        String[] wrapped = wrapText(line, g2.getFontMetrics(), boxW - 44);
+        int textY = boxY + 52;
+        for (String piece : wrapped) {
+            g2.drawString(piece, boxX + 22, textY);
+            textY += 20;
+        }
+
+        g2.setColor(new Color(150, 210, 170));
+        g2.setFont(pixelFont(11f));
+        g2.drawString("Press [T] to Continue", boxX + boxW - 160, boxY + boxH - 12);
+    }
+
+    private String[] wrapText(String text, java.awt.FontMetrics fm, int maxWidth) {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        for (String word : text.split(" ")) {
+            if (out.isEmpty()) {
+                out.add(word);
+            } else {
+                String last = out.get(out.size() - 1);
+                if (fm.stringWidth(last + " " + word) <= maxWidth) {
+                    out.set(out.size() - 1, last + " " + word);
+                } else {
+                    out.add(word);
+                }
+            }
+        }
+        return out.toArray(new String[0]);
+    }
+
     private void drawMiniMap(Graphics2D g2) {
         int mapDiameter = 136;
         int mapX = gp.screenWidth - mapDiameter - 20;
@@ -239,14 +376,16 @@ public class UI {
         g2.fillOval(mapX, mapY, mapDiameter, mapDiameter);
 
         double scale = (double) mapDiameter / (double) gp.worldWidth;
+        double wallRadius = (gp.levelConfig != null) ? gp.levelConfig.wallRadius : 20.0;
+        int centerCol = (gp.levelConfig != null) ? gp.levelConfig.worldCols / 2 : 25;
 
-        // Beach Coastline
+        // Beach Coastline (east side)
         g2.setColor(new Color(215, 185, 125));
-        int beachX = mapX + (int) (42 * gp.tileSize * scale);
+        int beachX = mapX + (int) (centerCol * gp.tileSize * scale);
         g2.fillRect(beachX, mapY, mapDiameter - (beachX - mapX), mapDiameter);
 
         // Circular Courtyard
-        int wallPixelRadius = (int) (20.0 * gp.tileSize * scale);
+        int wallPixelRadius = (int) (wallRadius * gp.tileSize * scale);
         g2.setColor(new Color(35, 75, 55));
         g2.fillOval(centerX - wallPixelRadius, centerY - wallPixelRadius, wallPixelRadius * 2, wallPixelRadius * 2);
 
@@ -300,6 +439,22 @@ public class UI {
                     g2.fillOval(gx, gy, 4, 4);
                 }
             }
+        }
+
+        // Boss
+        if (gp.boss != null && gp.boss.alive) {
+            int bx = mapX + (int) (gp.boss.worldX * scale);
+            int by = mapY + (int) (gp.boss.worldY * scale);
+            g2.setColor(new Color(255, 50, 50));
+            g2.fillOval(bx - 3, by - 3, 9, 9);
+        }
+
+        // NPC
+        if (gp.npc != null) {
+            int nx = mapX + (int) (gp.npc.worldX * scale);
+            int ny = mapY + (int) (gp.npc.worldY * scale);
+            g2.setColor(new Color(80, 220, 120));
+            g2.fillRect(nx - 2, ny - 2, 5, 5);
         }
 
         // Player Dot
