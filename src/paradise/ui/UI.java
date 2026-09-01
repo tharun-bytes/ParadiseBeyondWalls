@@ -6,20 +6,78 @@ import paradise.entity.Ghost;
 import paradise.object.Building;
 import paradise.object.CapturePoint;
 
+import javax.imageio.ImageIO;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontFormatException;
 import java.awt.Graphics2D;
-import java.awt.Polygon;
-import java.awt.geom.Area;
-import java.awt.geom.Ellipse2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
 
 public class UI {
 
     private final GamePanel gp;
 
+    // Wood theme (pixel-art) assets for the pause menu
+    private BufferedImage panelTex;
+    private BufferedImage buttonNormalTex;
+    private BufferedImage buttonHoverTex;
+    private BufferedImage heartSheet;
+    private Font pixelFont;
+
     public UI(GamePanel gp) {
         this.gp = gp;
+        loadTheme();
+    }
+
+    private void loadTheme() {
+        try {
+            panelTex = ImageIO.read(new File("src/paradise/ui/theme/nine_path_panel.png"));
+            buttonNormalTex = ImageIO.read(new File("src/paradise/ui/theme/button_normal.png"));
+            buttonHoverTex = ImageIO.read(new File("src/paradise/ui/theme/button_hover.png"));
+            heartSheet = ImageIO.read(new File("src/paradise/ui/theme/Heart.png"));
+        } catch (IOException e) {
+            System.out.println("Could not load UI theme images: " + e.getMessage());
+        }
+
+        try {
+            pixelFont = Font.createFont(Font.TRUETYPE_FONT, new File("src/paradise/ui/theme/NormalFont.ttf"));
+        } catch (IOException | FontFormatException e) {
+            System.out.println("Could not load pixel font, falling back to default: " + e.getMessage());
+            pixelFont = new Font("Monospaced", Font.BOLD, 16);
+        }
+    }
+
+    private Font pixelFont(float size) {
+        return pixelFont.deriveFont(Font.PLAIN, size);
+    }
+
+    /** Draws a nine-slice image stretched to an arbitrary width/height without blurring the pixel art. */
+    private void drawNinePatch(Graphics2D g2, BufferedImage img, int destX, int destY, int destW, int destH,
+                               int left, int top, int right, int bottom) {
+        if (img == null) return;
+        Object oldInterp = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+
+        int srcW = img.getWidth();
+        int srcH = img.getHeight();
+        int[] sx = {0, left, srcW - right, srcW};
+        int[] sy = {0, top, srcH - bottom, srcH};
+        int[] dx = {destX, destX + left, destX + destW - right, destX + destW};
+        int[] dy = {destY, destY + top, destY + destH - bottom, destY + destH};
+
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 3; col++) {
+                g2.drawImage(img, dx[col], dy[row], dx[col + 1], dy[row + 1],
+                        sx[col], sy[row], sx[col + 1], sy[row + 1], null);
+            }
+        }
+
+        g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                oldInterp != null ? oldInterp : RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
     }
 
     public void draw(Graphics2D g2) {
@@ -47,32 +105,12 @@ public class UI {
         int panelX = gp.screenWidth / 2 - panelWidth / 2;
         int panelY = gp.screenHeight / 2 - panelHeight / 2;
 
-        // --- Layered pixel-art frame (outer glow -> border -> brown panel -> inset line) ---
-        Color outerFrame = new Color(255, 148, 68);
-        Color frameShadow = new Color(120, 60, 20);
-        Color panelBg = new Color(92, 60, 44);
-        Color panelInnerBorder = new Color(58, 34, 24);
-
-        int corner = 10;
-        g2.setColor(outerFrame);
-        g2.fillRoundRect(panelX, panelY, panelWidth, panelHeight, corner, corner);
-
-        int b1 = 6;
-        g2.setColor(frameShadow);
-        g2.fillRoundRect(panelX + b1, panelY + b1, panelWidth - b1 * 2, panelHeight - b1 * 2, corner - 2, corner - 2);
-
-        int b2 = 10;
-        g2.setColor(panelBg);
-        g2.fillRoundRect(panelX + b2, panelY + b2, panelWidth - b2 * 2, panelHeight - b2 * 2, corner - 4, corner - 4);
-
-        int b3 = 14;
-        g2.setColor(panelInnerBorder);
-        g2.setStroke(new BasicStroke(2));
-        g2.drawRoundRect(panelX + b3, panelY + b3, panelWidth - b3 * 2, panelHeight - b3 * 2, corner - 6, corner - 6);
+        // --- Panel background (real nine-slice wood-theme texture) ---
+        drawNinePatch(g2, panelTex, panelX, panelY, panelWidth, panelHeight, 4, 4, 4, 5);
 
         // --- Title ---
         g2.setColor(Color.WHITE);
-        g2.setFont(new Font("Monospaced", Font.BOLD, 26));
+        g2.setFont(pixelFont(30f));
         String title = "PAUSED";
         int titleWidth = g2.getFontMetrics().stringWidth(title);
         g2.drawString(title, panelX + panelWidth / 2 - titleWidth / 2, panelY + 55);
@@ -91,42 +129,24 @@ public class UI {
         }
 
         // --- Hint ---
-        g2.setFont(new Font("SansSerif", Font.PLAIN, 11));
-        g2.setColor(new Color(210, 190, 170));
-        String hint = "W/S or \u2191\u2193  \u2022  Enter to Select  \u2022  Esc to Resume";
+        g2.setFont(pixelFont(11f));
+        g2.setColor(new Color(230, 215, 195));
+        String hint = "W/S or Arrows  \u2022  Enter to Select  \u2022  Esc to Resume";
         int hintWidth = g2.getFontMetrics().stringWidth(hint);
         g2.drawString(hint, panelX + panelWidth / 2 - hintWidth / 2, panelY + panelHeight - 16);
     }
 
-    /** A chunky, beveled pixel-art style button used by the pause menu. */
+    /** A pixel-art button using the real wood-theme button textures (nine-sliced), highlighting the selected option. */
     private void drawPixelButton(Graphics2D g2, int x, int y, int w, int h, String label, boolean selected) {
-        Color border = selected ? new Color(255, 200, 120) : new Color(140, 70, 25);
-        Color fill = selected ? new Color(240, 130, 40) : new Color(200, 105, 40);
-        Color textColor = selected ? Color.WHITE : new Color(255, 235, 210);
+        BufferedImage tex = selected ? buttonHoverTex : buttonNormalTex;
+        drawNinePatch(g2, tex, x, y, w, h, 2, 2, 2, 2);
 
-        int corner = 8;
-        g2.setColor(border);
-        g2.fillRoundRect(x - 2, y - 2, w + 4, h + 4, corner, corner);
-        g2.setColor(fill);
-        g2.fillRoundRect(x, y, w, h, corner - 2, corner - 2);
-
-        // Subtle top highlight strip for a beveled, pixel-art feel
-        g2.setColor(new Color(255, 255, 255, 40));
-        g2.fillRoundRect(x + 3, y + 3, w - 6, h / 3, corner - 4, corner - 4);
-
-        g2.setFont(new Font("SansSerif", Font.BOLD, 16));
-        g2.setColor(textColor);
+        g2.setColor(selected ? new Color(60, 30, 10) : new Color(255, 240, 220));
+        g2.setFont(pixelFont(18f));
         int textWidth = g2.getFontMetrics().stringWidth(label);
         int textAscent = g2.getFontMetrics().getAscent();
         g2.drawString(label, x + w / 2 - textWidth / 2, y + h / 2 + textAscent / 2 - 4);
-
-        if (selected) {
-            g2.setColor(Color.WHITE);
-            g2.setFont(new Font("SansSerif", Font.BOLD, 16));
-            g2.drawString("\u25B8", x - 16, y + h / 2 + 6);
-        }
     }
-
 
     private void drawHeader(Graphics2D g2) {
         g2.setColor(new Color(15, 25, 40, 220));
@@ -153,21 +173,30 @@ public class UI {
         int panelW = 130;
         int panelH = 56;
 
-        g2.setColor(new Color(15, 25, 40, 220));
-        g2.fillRoundRect(panelX, panelY, panelW, panelH, 12, 12);
+        drawNinePatch(g2, panelTex, panelX, panelY, panelW, panelH, 4, 4, 4, 5);
 
-        g2.setColor(new Color(140, 170, 210));
-        g2.setFont(new Font("SansSerif", Font.BOLD, 10));
-        g2.drawString("HEALTH", panelX + 15, panelY + 18);
+        g2.setColor(Color.WHITE);
+        g2.setFont(pixelFont(11f));
+        g2.drawString("HEALTH", panelX + 14, panelY + 18);
 
-        int heartSize = 18;
+        // Heart.png is a 5-frame strip (empty -> full); frame 0 = empty, frame 4 = full.
+        int heartSize = 22;
         int spacing = 24;
-        int heartY = panelY + 26;
-        for (int i = 0; i < gp.maxHealth; i++) {
-            int heartX = panelX + 15 + i * spacing;
-            boolean filled = i < gp.playerHealth;
-            Color color = filled ? new Color(235, 60, 70) : new Color(80, 45, 50);
-            drawHeart(g2, heartX, heartY, heartSize, color, filled);
+        int heartY = panelY + 24;
+        if (heartSheet != null) {
+            int frameW = heartSheet.getWidth() / 5;
+            int frameH = heartSheet.getHeight();
+            Object oldInterp = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            for (int i = 0; i < gp.maxHealth; i++) {
+                int heartX = panelX + 14 + i * spacing;
+                boolean filled = i < gp.playerHealth;
+                int frame = filled ? 4 : 0;
+                g2.drawImage(heartSheet, heartX, heartY, heartX + heartSize, heartY + heartSize,
+                        frame * frameW, 0, frame * frameW + frameW, frameH, null);
+            }
+            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+                    oldInterp != null ? oldInterp : RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
         }
     }
 
@@ -177,42 +206,18 @@ public class UI {
         int panelW = 130;
         int panelH = 46;
 
-        g2.setColor(new Color(15, 25, 40, 220));
-        g2.fillRoundRect(panelX, panelY, panelW, panelH, 12, 12);
+        drawNinePatch(g2, panelTex, panelX, panelY, panelW, panelH, 4, 4, 4, 5);
 
-        g2.setColor(new Color(140, 170, 210));
-        g2.setFont(new Font("SansSerif", Font.BOLD, 10));
-        g2.drawString("STAMINA", panelX + 15, panelY + 18);
+        g2.setColor(Color.WHITE);
+        g2.setFont(pixelFont(11f));
+        g2.drawString("STAMINA", panelX + 14, panelY + 18);
 
-        g2.setColor(new Color(60, 70, 85));
-        g2.fillRoundRect(panelX + 15, panelY + 28, 100, 8, 4, 4);
+        g2.setColor(new Color(40, 30, 25));
+        g2.fillRoundRect(panelX + 14, panelY + 26, 100, 8, 4, 4);
 
         int currentBarWidth = (int) ((gp.currentStamina / (double) gp.maxStamina) * 100);
         g2.setColor(new Color(0, 220, 255));
-        g2.fillRoundRect(panelX + 15, panelY + 28, Math.max(0, currentBarWidth), 8, 4, 4);
-    }
-
-    /** Draws a proper vector heart (two circular lobes + a triangular point) instead of a text glyph,
-     *  which renders inconsistently across fonts/platforms. */
-    private void drawHeart(Graphics2D g2, int x, int y, int size, Color color, boolean filled) {
-        int r = size / 4;
-        Ellipse2D.Double leftLobe = new Ellipse2D.Double(x, y, 2 * r, 2 * r);
-        Ellipse2D.Double rightLobe = new Ellipse2D.Double(x + 2 * r, y, 2 * r, 2 * r);
-        int[] xPoints = {x, x + 4 * r, x + 2 * r};
-        int[] yPoints = {y + r, y + r, y + size};
-        Polygon point = new Polygon(xPoints, yPoints, 3);
-
-        Area heart = new Area(leftLobe);
-        heart.add(new Area(rightLobe));
-        heart.add(new Area(point));
-
-        g2.setColor(color);
-        if (filled) {
-            g2.fill(heart);
-        } else {
-            g2.setStroke(new BasicStroke(1.8f));
-            g2.draw(heart);
-        }
+        g2.fillRoundRect(panelX + 14, panelY + 26, Math.max(0, currentBarWidth), 8, 4, 4);
     }
 
     private void drawMiniMap(Graphics2D g2) {
@@ -235,23 +240,28 @@ public class UI {
 
         double scale = (double) mapDiameter / (double) gp.worldWidth;
 
+        // Beach Coastline
         g2.setColor(new Color(215, 185, 125));
         int beachX = mapX + (int) (42 * gp.tileSize * scale);
         g2.fillRect(beachX, mapY, mapDiameter - (beachX - mapX), mapDiameter);
 
+        // Circular Courtyard
         int wallPixelRadius = (int) (20.0 * gp.tileSize * scale);
         g2.setColor(new Color(35, 75, 55));
         g2.fillOval(centerX - wallPixelRadius, centerY - wallPixelRadius, wallPixelRadius * 2, wallPixelRadius * 2);
 
+        // Wall Ring
         g2.setColor(new Color(110, 115, 125));
         g2.setStroke(new BasicStroke(3));
         g2.drawOval(centerX - wallPixelRadius, centerY - wallPixelRadius, wallPixelRadius * 2, wallPixelRadius * 2);
 
+        // Gates
         g2.setColor(new Color(230, 180, 80));
         g2.fillRect(centerX + wallPixelRadius - 3, centerY - 3, 7, 7);
         g2.setColor(new Color(46, 204, 113));
         g2.fillRect(centerX - wallPixelRadius - 3, centerY - 3, 7, 7);
 
+        // Buildings
         if (gp.mapBuildings != null) {
             g2.setColor(new Color(130, 130, 140));
             for (Building b : gp.mapBuildings) {
@@ -265,6 +275,7 @@ public class UI {
             }
         }
 
+        // Capture Points
         if (gp.capturePoints != null) {
             float pulse = (float) (Math.sin(gp.animationFrame * 0.1) * 2);
             for (CapturePoint cp : gp.capturePoints) {
@@ -279,6 +290,7 @@ public class UI {
             }
         }
 
+        // Ghosts
         if (gp.ghosts != null) {
             g2.setColor(new Color(255, 75, 75));
             for (Ghost ghost : gp.ghosts) {
@@ -290,6 +302,7 @@ public class UI {
             }
         }
 
+        // Player Dot
         int playerDotX = mapX + (int) (gp.playerX * scale);
         int playerDotY = mapY + (int) (gp.playerY * scale);
         if (gp.isHiding) g2.setColor(new Color(46, 204, 113));
