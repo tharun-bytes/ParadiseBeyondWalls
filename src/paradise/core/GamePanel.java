@@ -1,10 +1,6 @@
 package paradise.core;
 
-<<<<<<< HEAD
 import paradise.effects.Fireflies;
-=======
-import paradise.effects.AmbientParticles;
->>>>>>> 015ac1b9982e4947967e2876880e54e71eb73acf
 import paradise.entity.Ghost;
 import paradise.input.KeyHandler;
 import paradise.object.Building;
@@ -62,11 +58,9 @@ public class GamePanel extends JPanel implements Runnable {
     public final UI ui = new UI(this);
     public final Sound sound = new Sound();
     public final Sound se = new Sound();
-<<<<<<< HEAD
+
+    // Atmospheric Effects
     public final Fireflies fireflies = new Fireflies(this);
-=======
-    public final AmbientParticles ambientParticles = new AmbientParticles(this);
->>>>>>> 015ac1b9982e4947967e2876880e54e71eb73acf
 
     public int playerX;
     public int playerY;
@@ -236,7 +230,6 @@ public class GamePanel extends JPanel implements Runnable {
 
     public void update() {
         animationFrame++;
-        ambientParticles.update();
 
         if (gameState == GameState.PLAYING && keyHandler.consumeEscPressed()) {
             gameState = GameState.PAUSED;
@@ -525,17 +518,11 @@ public class GamePanel extends JPanel implements Runnable {
             drawPlayer(g2);
         }
 
-<<<<<<< HEAD
         drawNightOverlay(g2);
         paradise.object.VillageDecor.drawLampGlow(g2, this, animationFrame);
+
         fireflies.draw(g2);
 
-=======
-        // 2. Ambient foreground atmosphere (drifting leaves/petals on the wind)
-        ambientParticles.draw(g2);
-
-        // 3. Clear UI Overlay (No dark filter)
->>>>>>> 015ac1b9982e4947967e2876880e54e71eb73acf
         drawInteractionPrompt(g2);
         ui.draw(g2);
         g2.dispose();
