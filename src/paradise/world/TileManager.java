@@ -79,8 +79,10 @@ public class TileManager {
                         g2.setColor(new Color(24, 75, 120));
                         g2.fillRect(screenX, screenY, gp.tileSize, gp.tileSize);
                         g2.setColor(new Color(40, 110, 165, 130));
-                        g2.drawLine(screenX + 6, screenY + 14, screenX + 28, screenY + 14);
-                        g2.drawLine(screenX + 20, screenY + 34, screenX + 42, screenY + 34);
+                        int waveOffset1 = (int) Math.round(Math.sin(gp.animationFrame * 0.05 + col * 0.6) * 3);
+                        int waveOffset2 = (int) Math.round(Math.sin(gp.animationFrame * 0.05 + row * 0.6 + 2) * 3);
+                        g2.drawLine(screenX + 6, screenY + 14 + waveOffset1, screenX + 28, screenY + 14 + waveOffset1);
+                        g2.drawLine(screenX + 20, screenY + 34 + waveOffset2, screenX + 42, screenY + 34 + waveOffset2);
                         break;
 
                     case TILE_SAND:
@@ -94,6 +96,7 @@ public class TileManager {
                         if ((col + row) % 2 == 0) g2.setColor(new Color(34, 70, 52));
                         else g2.setColor(new Color(40, 82, 60));
                         g2.fillRect(screenX, screenY, gp.tileSize, gp.tileSize);
+                        drawGrassBlades(g2, col, row, screenX, screenY);
                         break;
 
                     case TILE_WALL:
@@ -109,6 +112,39 @@ public class TileManager {
                         break;
                 }
             }
+        }
+    }
+
+    private static final Color GRASS_BLADE_SHADOW = new Color(58, 110, 74);
+    private static final Color GRASS_BLADE_HIGHLIGHT = new Color(84, 148, 100);
+
+    /**
+     * Small wind-blown grass tufts on top of a grass tile. Blade positions are
+     * derived deterministically from the tile's col/row so they stay put
+     * frame-to-frame; only the sway angle animates, driven by a slow "gust"
+     * envelope layered with a faster per-blade wobble so the wind feels organic
+     * rather than perfectly uniform.
+     */
+    private void drawGrassBlades(Graphics2D g2, int col, int row, int screenX, int screenY) {
+        double gust = 0.5 + 0.5 * Math.sin(gp.animationFrame * 0.015 + col * 0.3);
+        double windAngle = Math.sin(gp.animationFrame * 0.07 + row * 0.5) * (2.0 + gust * 4.0);
+
+        int tileSeed = (col * 92821) ^ (row * 68917);
+        g2.setStroke(new BasicStroke(1.4f));
+
+        for (int i = 0; i < 3; i++) {
+            int bladeSeed = tileSeed + i * 7351;
+            int bx = screenX + 6 + Math.floorMod(bladeSeed, gp.tileSize - 12);
+            int by = screenY + gp.tileSize - 4 - Math.floorMod(bladeSeed / 7, 8);
+            int bladeHeight = 7 + Math.floorMod(bladeSeed / 13, 6);
+            double phase = (Math.floorMod(bladeSeed, 100) / 100.0) * Math.PI * 2;
+            double sway = windAngle + Math.sin(gp.animationFrame * 0.12 + phase) * 1.5;
+
+            int tipX = bx + (int) Math.round(sway);
+            int tipY = by - bladeHeight;
+
+            g2.setColor(((col + row + i) % 2 == 0) ? GRASS_BLADE_SHADOW : GRASS_BLADE_HIGHLIGHT);
+            g2.drawLine(bx, by, tipX, tipY);
         }
     }
 }

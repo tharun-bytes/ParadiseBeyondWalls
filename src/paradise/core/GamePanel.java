@@ -1,5 +1,6 @@
 package paradise.core;
 
+import paradise.effects.AmbientParticles;
 import paradise.entity.Ghost;
 import paradise.input.KeyHandler;
 import paradise.object.Building;
@@ -57,6 +58,7 @@ public class GamePanel extends JPanel implements Runnable {
     public final UI ui = new UI(this);
     public final Sound sound = new Sound();
     public final Sound se = new Sound();
+    public final AmbientParticles ambientParticles = new AmbientParticles(this);
 
     public int playerX;
     public int playerY;
@@ -207,6 +209,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     public void update() {
         animationFrame++;
+        ambientParticles.update();
 
         if (gameState == GameState.PLAYING && keyHandler.consumeEscPressed()) {
             gameState = GameState.PAUSED;
@@ -495,7 +498,10 @@ public class GamePanel extends JPanel implements Runnable {
             drawPlayer(g2);
         }
 
-        // 2. Clear UI Overlay (No dark filter)
+        // 2. Ambient foreground atmosphere (drifting leaves/petals on the wind)
+        ambientParticles.draw(g2);
+
+        // 3. Clear UI Overlay (No dark filter)
         drawInteractionPrompt(g2);
         ui.draw(g2);
         g2.dispose();

@@ -4,6 +4,7 @@ import paradise.core.GamePanel;
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.geom.AffineTransform;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -39,9 +40,23 @@ public class Tree {
             // Shift left by half a tile and up by a full tile to keep the trunk planted exactly where it was
             int drawX = screenX - (gp.tileSize / 2);
             int drawY = screenY - gp.tileSize;
+            int drawSize = gp.tileSize * 2;
 
+            // Gentle wind sway: rotate the whole canopy a couple of degrees around the
+            // trunk's foot so the tree looks planted while it rocks in the breeze. A slow
+            // "gust" envelope (unique per tree via worldX) is layered on a faster sway so
+            // trees don't all sway in perfect unison.
+            double gust = 0.5 + 0.5 * Math.sin(gp.animationFrame * 0.012 + worldX * 0.004);
+            double swayAngle = Math.toRadians(Math.sin(gp.animationFrame * 0.045 + worldY * 0.02) * (1.2 + gust * 1.8));
+
+            int anchorX = drawX + drawSize / 2;
+            int anchorY = drawY + drawSize;
+
+            AffineTransform originalTransform = g2.getTransform();
+            g2.rotate(swayAngle, anchorX, anchorY);
             // Draw at double size (gp.tileSize * 2)
-            g2.drawImage(image, drawX, drawY, gp.tileSize * 2, gp.tileSize * 2, null);
+            g2.drawImage(image, drawX, drawY, drawSize, drawSize, null);
+            g2.setTransform(originalTransform);
         }
     }
 }
