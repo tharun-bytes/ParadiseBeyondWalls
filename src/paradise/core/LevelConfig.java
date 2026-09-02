@@ -8,28 +8,10 @@ public class LevelConfig {
     public final double wallRadius;
     public final int[][] pointTiles;
     public final int[][] ghostTiles;
+    public final int[][] monsterSpawns; // Replaces the single boss
     public final int ghostSpeed;
     public final boolean hasSword;
-    public final BossData boss;
     public final NpcData npc;
-
-    public static class BossData {
-        public final String name;
-        public final int hp;
-        public final int speed;
-        public final int damage;
-        public final int spawnCol;
-        public final int spawnRow;
-
-        public BossData(String name, int hp, int speed, int damage, int spawnCol, int spawnRow) {
-            this.name = name;
-            this.hp = hp;
-            this.speed = speed;
-            this.damage = damage;
-            this.spawnCol = spawnCol;
-            this.spawnRow = spawnRow;
-        }
-    }
 
     public static class NpcData {
         public final String name;
@@ -46,8 +28,8 @@ public class LevelConfig {
     }
 
     public LevelConfig(String levelName, String subTitle, int worldCols, int worldRows, double wallRadius,
-                       int[][] pointTiles, int[][] ghostTiles, int ghostSpeed,
-                       boolean hasSword, BossData boss, NpcData npc) {
+                       int[][] pointTiles, int[][] ghostTiles, int[][] monsterSpawns, int ghostSpeed,
+                       boolean hasSword, NpcData npc) {
         this.levelName = levelName;
         this.subTitle = subTitle;
         this.worldCols = worldCols;
@@ -55,9 +37,9 @@ public class LevelConfig {
         this.wallRadius = wallRadius;
         this.pointTiles = pointTiles;
         this.ghostTiles = ghostTiles;
+        this.monsterSpawns = monsterSpawns;
         this.ghostSpeed = ghostSpeed;
         this.hasSword = hasSword;
-        this.boss = boss;
         this.npc = npc;
     }
 
@@ -69,19 +51,14 @@ public class LevelConfig {
                         "LEVEL 01 • THE FALLEN COURTYARD",
                         50, 50, 20.0,
                         new int[][]{
-                                {25, 12}, // Center North Clearing
-                                {18, 25}, // Center West Clearing
-                                {32, 25}, // Center East Clearing
-                                {25, 38}, // Center South Clearing
-                                {25, 25}  // Central Plaza
+                                {25, 12}, {18, 25}, {32, 25}, {25, 38}, {25, 25}
                         },
                         new int[][]{
-                                {20, 15},
-                                {30, 35}
+                                {20, 15}, {30, 35} // Ghosts kept for the stealth tutorial
                         },
+                        new int[][]{}, // No blood monsters in level 1
                         2,
                         false,
-                        null,
                         new NpcData(
                                 "Old Scout", 22, 20,
                                 "You're inside Wall Maria's courtyard. Press W/A/S/D to move.",
@@ -94,34 +71,25 @@ public class LevelConfig {
             case 2:
                 return new LevelConfig(
                         "PARADISE // WALL ROSE",
-                        "LEVEL 02 • THE SHADOW PLAZA",
+                        "LEVEL 02 • THE BLOOD HORDE",
                         60, 60, 24.0,
                         new int[][]{
-                                {30, 19},
-                                {19, 30},
-                                {41, 30},
-                                {30, 41},
-                                {22, 22},
-                                {38, 38},
-                                {30, 30}
+                                {30, 19}, {19, 30}, {41, 30}, {30, 41}, {22, 22}, {38, 38}, {30, 30}
                         },
+                        new int[][]{}, // Ghosts completely removed from Level 2
                         new int[][]{
-                                {18, 18},
-                                {42, 18},
-                                {26, 42},
-                                {36, 36}
+                                // 7 Blood Monsters spawned across the plaza
+                                {20, 20}, {40, 40}, {20, 40}, {40, 20}, {30, 25}, {25, 35}, {35, 35}
                         },
-                        3,
+                        0,
                         true,
-                        new BossData("THE COLOSSAL TITAN", 40, 2, 1, 36, 22),
                         new NpcData(
                                 "Scout Captain", 24, 24,
-                                "Soldier! Welcome to Wall Rose — this courtyard is three times larger.",
-                                "You now carry a BLADE. Press [J] to SWING it and cut down the wraiths.",
-                                "TIP: Keep [Shift] ready to DASH, and [E] to hide when the hunt closes in.",
-                                "Capture all 7 glowing points — the Colossal will prowl the dark courtyard.",
-                                "WARN: The COLOSSAL TITAN guards the WEST gate and takes many hits.",
-                                "Slay it with your sword, then step through the WEST gate to Wall Sina."
+                                "Soldier! Welcome to Wall Rose — this courtyard is crawling with Blood Monsters.",
+                                "You now carry a BLADE. Press [J] to SWING it and cut them down.",
+                                "TIP: Keep [Shift] ready to DASH, and swing carefully.",
+                                "Capture all 7 glowing points to unlock the WEST gate.",
+                                "Slay the horde, then step through the gate to Wall Sina."
                         )
                 );
 
@@ -132,28 +100,21 @@ public class LevelConfig {
                         "LEVEL 03 • THE INNER CITADEL",
                         60, 60, 26.0,
                         new int[][]{
-                                {30, 19},
-                                {20, 24},
-                                {40, 24},
-                                {20, 36},
-                                {40, 36},
-                                {30, 43},
-                                {30, 30}
+                                {30, 19}, {20, 24}, {40, 24}, {20, 36}, {40, 36}, {30, 43}, {30, 30}
                         },
+                        new int[][]{}, // Ghosts completely removed from Level 3
                         new int[][]{
-                                {18, 18},
-                                {42, 18},
-                                {18, 42},
-                                {42, 42}
+                                // 10 Blood Monsters for a harder final level
+                                {20, 20}, {40, 40}, {20, 40}, {40, 20}, {30, 30},
+                                {25, 25}, {35, 35}, {25, 35}, {35, 25}, {30, 45}
                         },
-                        4,
+                        0,
                         true,
-                        null,
                         new NpcData(
                                 "Veteran Guard", 26, 27,
                                 "Wall Sina at last... the final ring before true freedom.",
                                 "Capture all 7 points to open the WEST gate.",
-                                "These wraiths are the swiftest yet — keep moving, keep swinging.",
+                                "The Blood Monsters are swarming. Keep moving, keep swinging.",
                                 "Once you step through, this nightmare ends. Finish it."
                         )
                 );

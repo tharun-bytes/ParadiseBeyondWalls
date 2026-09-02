@@ -2,6 +2,7 @@ package paradise.ui;
 
 import paradise.core.GamePanel;
 import paradise.core.GameState;
+import paradise.entity.Boss;
 import paradise.entity.Ghost;
 import paradise.object.Building;
 import paradise.object.CapturePoint;
@@ -55,7 +56,6 @@ public class UI {
         return pixelFont.deriveFont(Font.PLAIN, size);
     }
 
-    /** Draws a nine-slice image stretched to an arbitrary width/height without blurring the pixel art. */
     private void drawNinePatch(Graphics2D g2, BufferedImage img, int destX, int destY, int destW, int destH,
                                int left, int top, int right, int bottom) {
         if (img == null) return;
@@ -86,7 +86,6 @@ public class UI {
             drawHealth(g2);
             drawStamina(g2);
             drawMiniMap(g2);
-            drawBossBar(g2);
             drawDoorLockHint(g2);
             drawStatusMessage(g2);
             if (gp.gameState == GameState.LEVEL_TRANSITION) drawTransition(g2);
@@ -101,7 +100,6 @@ public class UI {
     }
 
     private void drawPauseMenu(Graphics2D g2) {
-        // Dim the frozen game behind the menu
         g2.setColor(new Color(20, 15, 10, 190));
         g2.fillRect(0, 0, gp.screenWidth, gp.screenHeight);
 
@@ -110,17 +108,14 @@ public class UI {
         int panelX = gp.screenWidth / 2 - panelWidth / 2;
         int panelY = gp.screenHeight / 2 - panelHeight / 2;
 
-        // --- Panel background (real nine-slice wood-theme texture) ---
         drawNinePatch(g2, panelTex, panelX, panelY, panelWidth, panelHeight, 4, 4, 4, 5);
 
-        // --- Title ---
         g2.setColor(Color.WHITE);
         g2.setFont(pixelFont(30f));
         String title = "PAUSED";
         int titleWidth = g2.getFontMetrics().stringWidth(title);
         g2.drawString(title, panelX + panelWidth / 2 - titleWidth / 2, panelY + 55);
 
-        // --- Buttons ---
         int buttonWidth = panelWidth - 80;
         int buttonHeight = 42;
         int buttonX = panelX + 40;
@@ -133,7 +128,6 @@ public class UI {
             drawPixelButton(g2, buttonX, by, buttonWidth, buttonHeight, gp.pauseMenuOptions[i], selected);
         }
 
-        // --- Hint ---
         g2.setFont(pixelFont(11f));
         g2.setColor(new Color(230, 215, 195));
         String hint = "W/S or Arrows  \u2022  Enter to Select  \u2022  Esc to Resume";
@@ -141,7 +135,6 @@ public class UI {
         g2.drawString(hint, panelX + panelWidth / 2 - hintWidth / 2, panelY + panelHeight - 16);
     }
 
-    /** A pixel-art button using the real wood-theme button textures (nine-sliced), highlighting the selected option. */
     private void drawPixelButton(Graphics2D g2, int x, int y, int w, int h, String label, boolean selected) {
         BufferedImage tex = selected ? buttonHoverTex : buttonNormalTex;
         drawNinePatch(g2, tex, x, y, w, h, 2, 2, 2, 2);
@@ -154,7 +147,10 @@ public class UI {
     }
 
     private void drawHeader(Graphics2D g2) {
-        int panelHeight = gp.hasSword ? 100 : 80;
+        int panelHeight = 80;
+        if (gp.hasSword) panelHeight += 25;
+        if (gp.areMonstersAlive()) panelHeight += 25;
+
         g2.setColor(new Color(15, 25, 40, 220));
         g2.fillRoundRect(20, 20, 320, panelHeight, 12, 12);
 
@@ -177,6 +173,17 @@ public class UI {
             g2.setFont(new Font("SansSerif", Font.BOLD, 11));
             g2.drawString("[J] BLADE READY — SWING TO SLAY", 35, 108);
         }
+
+        // Monster Count Tracker
+        if (gp.areMonstersAlive() && gp.monsters != null) {
+            int aliveCount = 0;
+            for (Boss m : gp.monsters) {
+                if (m != null && m.alive) aliveCount++;
+            }
+            g2.setColor(new Color(255, 100, 100));
+            g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+            g2.drawString("BLOOD MONSTERS REMAINING: " + aliveCount, 35, 128);
+        }
     }
 
     private void drawHealth(Graphics2D g2) {
@@ -191,7 +198,6 @@ public class UI {
         g2.setFont(pixelFont(11f));
         g2.drawString("HEALTH", panelX + 14, panelY + 18);
 
-        // Heart.png is a 5-frame strip (empty -> full); frame 0 = empty, frame 4 = full.
         int heartSize = 22;
         int spacing = 24;
         int heartY = panelY + 24;
@@ -232,39 +238,9 @@ public class UI {
         g2.fillRoundRect(panelX + 14, panelY + 26, Math.max(0, currentBarWidth), 8, 4, 4);
     }
 
-    private void drawBossBar(Graphics2D g2) {
-        if (gp.boss == null || !gp.boss.alive) return;
-        int panelW = 360;
-        int panelH = 54;
-        int panelX = gp.screenWidth / 2 - panelW / 2;
-        int panelY = 18;
-
-        drawNinePatch(g2, panelTex, panelX, panelY, panelW, panelH, 4, 4, 4, 5);
-
-        g2.setColor(new Color(255, 190, 140));
-        g2.setFont(pixelFont(13f));
-        g2.drawString(gp.boss.getName(), panelX + 16, panelY + 22);
-
-        g2.setColor(new Color(230, 225, 218));
-        g2.setFont(pixelFont(10f));
-        g2.drawString(gp.boss.hp + " / " + gp.boss.maxHp, panelX + panelW - 90, panelY + 22);
-
-        int barX = panelX + 16;
-        int barY = panelY + 30;
-        int barW = panelW - 32;
-        int barH = 10;
-        g2.setColor(new Color(25, 18, 16));
-        g2.fillRoundRect(barX, barY, barW, barH, 5, 5);
-
-        int fill = (int) ((gp.boss.hp / (double) gp.boss.maxHp) * barW);
-        boolean enraged = gp.boss.hp <= gp.boss.maxHp / 2;
-        g2.setColor(enraged ? new Color(255, 95, 55) : new Color(205, 55, 45));
-        g2.fillRoundRect(barX, barY, Math.max(0, fill), barH, 5, 5);
-    }
-
     private void drawDoorLockHint(Graphics2D g2) {
-        if (!gp.doorLocked || gp.boss == null || !gp.boss.alive) return;
-        String text = "THE " + gp.boss.getName().toUpperCase() + " BLOCKS THE WEST GATE — SLAY IT TO PASS";
+        if (!gp.doorLocked || !gp.areMonstersAlive()) return;
+        String text = "THE BLOOD HORDE BLOCKS THE WEST GATE — SLAY THEM TO PASS";
         g2.setFont(pixelFont(15f));
         int w = g2.getFontMetrics().stringWidth(text) + 40;
         int h = 36;
@@ -379,28 +355,23 @@ public class UI {
         double wallRadius = (gp.levelConfig != null) ? gp.levelConfig.wallRadius : 20.0;
         int centerCol = (gp.levelConfig != null) ? gp.levelConfig.worldCols / 2 : 25;
 
-        // Beach Coastline (east side)
         g2.setColor(new Color(215, 185, 125));
         int beachX = mapX + (int) (centerCol * gp.tileSize * scale);
         g2.fillRect(beachX, mapY, mapDiameter - (beachX - mapX), mapDiameter);
 
-        // Circular Courtyard
         int wallPixelRadius = (int) (wallRadius * gp.tileSize * scale);
         g2.setColor(new Color(35, 75, 55));
         g2.fillOval(centerX - wallPixelRadius, centerY - wallPixelRadius, wallPixelRadius * 2, wallPixelRadius * 2);
 
-        // Wall Ring
         g2.setColor(new Color(110, 115, 125));
         g2.setStroke(new BasicStroke(3));
         g2.drawOval(centerX - wallPixelRadius, centerY - wallPixelRadius, wallPixelRadius * 2, wallPixelRadius * 2);
 
-        // Gates
         g2.setColor(new Color(230, 180, 80));
         g2.fillRect(centerX + wallPixelRadius - 3, centerY - 3, 7, 7);
         g2.setColor(new Color(46, 204, 113));
         g2.fillRect(centerX - wallPixelRadius - 3, centerY - 3, 7, 7);
 
-        // Buildings
         if (gp.mapBuildings != null) {
             g2.setColor(new Color(130, 130, 140));
             for (Building b : gp.mapBuildings) {
@@ -414,7 +385,6 @@ public class UI {
             }
         }
 
-        // Capture Points
         if (gp.capturePoints != null) {
             float pulse = (float) (Math.sin(gp.animationFrame * 0.1) * 2);
             for (CapturePoint cp : gp.capturePoints) {
@@ -429,11 +399,10 @@ public class UI {
             }
         }
 
-        // Ghosts
         if (gp.ghosts != null) {
             g2.setColor(new Color(255, 75, 75));
             for (Ghost ghost : gp.ghosts) {
-                if (ghost != null) {
+                if (ghost != null && ghost.alive) {
                     int gx = mapX + (int) (ghost.worldX * scale);
                     int gy = mapY + (int) (ghost.worldY * scale);
                     g2.fillOval(gx, gy, 4, 4);
@@ -441,15 +410,18 @@ public class UI {
             }
         }
 
-        // Boss
-        if (gp.boss != null && gp.boss.alive) {
-            int bx = mapX + (int) (gp.boss.worldX * scale);
-            int by = mapY + (int) (gp.boss.worldY * scale);
+        // Monsters on minimap
+        if (gp.monsters != null) {
             g2.setColor(new Color(255, 50, 50));
-            g2.fillOval(bx - 3, by - 3, 9, 9);
+            for (Boss m : gp.monsters) {
+                if (m != null && m.alive) {
+                    int mx = mapX + (int) (m.worldX * scale);
+                    int my = mapY + (int) (m.worldY * scale);
+                    g2.fillOval(mx - 3, my - 3, 9, 9);
+                }
+            }
         }
 
-        // NPC
         if (gp.npc != null) {
             int nx = mapX + (int) (gp.npc.worldX * scale);
             int ny = mapY + (int) (gp.npc.worldY * scale);
@@ -457,7 +429,6 @@ public class UI {
             g2.fillRect(nx - 2, ny - 2, 5, 5);
         }
 
-        // Player Dot
         int playerDotX = mapX + (int) (gp.playerX * scale);
         int playerDotY = mapY + (int) (gp.playerY * scale);
         if (gp.isHiding) g2.setColor(new Color(46, 204, 113));
