@@ -77,6 +77,28 @@ public class Boss {
         return new Rectangle(worldX + 16, worldY + 16, size - 32, size - 32);
     }
 
+    private boolean canBossMove(int deltaX, int deltaY) {
+        int nextX = worldX + deltaX;
+        int nextY = worldY + deltaY;
+
+        if (!gp.collisionChecker.canMove(worldX, worldY, size, size, deltaX, deltaY)) return false;
+
+        Rectangle futureBox = new Rectangle(nextX, nextY, size, size);
+        if (gp.mapBuildings != null) {
+            for (paradise.object.Building b : gp.mapBuildings) {
+                if (b != null && b.hitbox != null && b.hitbox.intersects(futureBox)) return false;
+            }
+        }
+
+        if (gp.monsters != null) {
+            for (Boss m : gp.monsters) {
+                if (m != null && m != this && m.alive && m.hitbox().intersects(futureBox)) return false;
+            }
+        }
+
+        return true;
+    }
+
     public void takeDamage(int amount) {
         if (!alive) return;
         hp -= amount;
@@ -108,12 +130,15 @@ public class Boss {
         if (worldY < py) dy = speed;
         if (worldY > py) dy = -speed;
 
-        worldX += dx;
-        worldY += dy;
+        if (dx != 0 && canBossMove(dx, 0)) worldX += dx;
+        if (dy != 0 && canBossMove(0, dy)) worldY += dy;
+
+        worldX = Math.max(0, Math.min(worldX, gp.worldWidth - size));
+        worldY = Math.max(0, Math.min(worldY, gp.worldHeight - size));
 
         // Check if boss touches the player
         if (attackCooldown == 0 && hitbox().intersects(new Rectangle(gp.playerX, gp.playerY, gp.playerSize, gp.playerSize))) {
-            gp.harmPlayerFromBoss(damage, worldX + size / 2, worldY + size / 2);
+            gp.harmPlayerFromBoss(damage, worldX + size / 2, worldY + size / 2, this);
             attackCooldown = 60; // 1 second cooldown before it can hit you again
             isAttacking = true;
             spriteIndex = 0; // Restart attack animation
@@ -149,13 +174,15 @@ public class Boss {
             if (!alive) {
                 // Play death animation once, then stay on the last frame
                 deathCounter++;
-                if (deathCounter > 10 && deathFrames != null) {
+                if (deathCounter > 10 && deathFrames != null && deathFrames.length > 0) {
                     if (spriteIndex < deathFrames.length - 1) {
                         spriteIndex++;
                     }
                     deathCounter = 0;
                 }
-                if (deathFrames != null) imageToDraw = deathFrames[spriteIndex];
+                if (deathFrames != null && deathFrames.length > 0 && spriteIndex < deathFrames.length) {
+                    imageToDraw = deathFrames[spriteIndex];
+                }
 
             } else if (isAttacking && attackFrames != null) {
                 if (spriteIndex < attackFrames.length) imageToDraw = attackFrames[spriteIndex];

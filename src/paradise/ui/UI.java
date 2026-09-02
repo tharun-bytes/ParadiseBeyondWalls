@@ -28,7 +28,6 @@ public class UI {
     private BufferedImage buttonHoverTex;
     private BufferedImage heartSheet;
     private Font pixelFont;
-
     public UI(GamePanel gp) {
         this.gp = gp;
         loadTheme();
@@ -148,7 +147,6 @@ public class UI {
 
     private void drawHeader(Graphics2D g2) {
         int panelHeight = 80;
-        if (gp.hasSword) panelHeight += 25;
         if (gp.areMonstersAlive()) panelHeight += 25;
 
         g2.setColor(new Color(15, 25, 40, 220));
@@ -168,12 +166,6 @@ public class UI {
         int totalPoints = (gp.levelConfig != null) ? gp.levelConfig.pointTiles.length : 5;
         g2.drawString("CAPTURE POINTS: " + gp.capturedPoints + " / " + totalPoints, 35, 85);
 
-        if (gp.hasSword) {
-            g2.setColor(new Color(130, 240, 255));
-            g2.setFont(new Font("SansSerif", Font.BOLD, 11));
-            g2.drawString("[J] BLADE READY — SWING TO SLAY", 35, 108);
-        }
-
         // Monster Count Tracker
         if (gp.areMonstersAlive() && gp.monsters != null) {
             int aliveCount = 0;
@@ -182,7 +174,7 @@ public class UI {
             }
             g2.setColor(new Color(255, 100, 100));
             g2.setFont(new Font("SansSerif", Font.BOLD, 11));
-            g2.drawString("BLOOD MONSTERS REMAINING: " + aliveCount, 35, 128);
+            g2.drawString("BLOOD MONSTERS REMAINING: " + aliveCount, 35, 108);
         }
     }
 
@@ -190,7 +182,7 @@ public class UI {
         int panelX = gp.screenWidth - 150;
         int panelY = 20;
         int panelW = 130;
-        int panelH = 56;
+        int panelH = 46;
 
         drawNinePatch(g2, panelTex, panelX, panelY, panelW, panelH, 4, 4, 4, 5);
 
@@ -198,29 +190,26 @@ public class UI {
         g2.setFont(pixelFont(11f));
         g2.drawString("HEALTH", panelX + 14, panelY + 18);
 
-        int heartSize = 22;
-        int spacing = 24;
-        int heartY = panelY + 24;
-        if (heartSheet != null) {
-            int frameW = heartSheet.getWidth() / 5;
-            int frameH = heartSheet.getHeight();
-            Object oldInterp = g2.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-            for (int i = 0; i < gp.maxHealth; i++) {
-                int heartX = panelX + 14 + i * spacing;
-                boolean filled = i < gp.playerHealth;
-                int frame = filled ? 4 : 0;
-                g2.drawImage(heartSheet, heartX, heartY, heartX + heartSize, heartY + heartSize,
-                        frame * frameW, 0, frame * frameW + frameW, frameH, null);
-            }
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                    oldInterp != null ? oldInterp : RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-        }
+        g2.setColor(new Color(40, 30, 25));
+        g2.fillRoundRect(panelX + 14, panelY + 26, 100, 8, 4, 4);
+
+        int currentBarWidth = (int) ((gp.playerHealth / (double) gp.maxHealth) * 100);
+        float healthRatio = gp.playerHealth / (float) gp.maxHealth;
+        Color barColor;
+        if (healthRatio > 0.5f) barColor = new Color(80, 220, 80);
+        else if (healthRatio > 0.25f) barColor = new Color(220, 180, 40);
+        else barColor = new Color(220, 60, 60);
+        g2.setColor(barColor);
+        g2.fillRoundRect(panelX + 14, panelY + 26, Math.max(0, currentBarWidth), 8, 4, 4);
+
+        g2.setColor(new Color(220, 220, 220));
+        g2.setFont(pixelFont(9f));
+        g2.drawString(gp.playerHealth + " / " + gp.maxHealth, panelX + 80, panelY + 42);
     }
 
     private void drawStamina(Graphics2D g2) {
         int panelX = gp.screenWidth - 150;
-        int panelY = 84;
+        int panelY = 74;
         int panelW = 130;
         int panelH = 46;
 

@@ -60,7 +60,7 @@ public class LevelConfig {
                         2,
                         false,
                         new NpcData(
-                                "Old Scout", 22, 20,
+                                "Old Scout", 43, 25,
                                 "You're inside Wall Maria's courtyard. Press W/A/S/D to move.",
                                 "TIP: Press [E] near a house to HIDE from the wraiths.",
                                 "Grab the 5 glowing capture points, then the WEST gate will open.",
@@ -82,12 +82,12 @@ public class LevelConfig {
                                 {20, 20}, {40, 40}, {20, 40}, {40, 20}, {30, 25}, {25, 35}, {35, 35}
                         },
                         0,
-                        true,
+                        false,
                         new NpcData(
                                 "Scout Captain", 24, 24,
                                 "Soldier! Welcome to Wall Rose — this courtyard is crawling with Blood Monsters.",
-                                "You now carry a BLADE. Press [J] to SWING it and cut them down.",
-                                "TIP: Keep [Shift] ready to DASH, and swing carefully.",
+                                "You carry no blade, but you are not helpless.",
+                                "Press [J] to THROW a blade at a range. Hold [Shift] and DASH through enemies to strike them.",
                                 "Capture all 7 glowing points to unlock the WEST gate.",
                                 "Slay the horde, then step through the gate to Wall Sina."
                         )
@@ -109,12 +109,12 @@ public class LevelConfig {
                                 {25, 25}, {35, 35}, {25, 35}, {35, 25}, {30, 45}
                         },
                         0,
-                        true,
+                        false,
                         new NpcData(
                                 "Veteran Guard", 26, 27,
                                 "Wall Sina at last... the final ring before true freedom.",
                                 "Capture all 7 points to open the WEST gate.",
-                                "The Blood Monsters are swarming. Keep moving, keep swinging.",
+                                "The Blood Monsters are swarming. THROW blades from range and DASH to strike.",
                                 "Once you step through, this nightmare ends. Finish it."
                         )
                 );

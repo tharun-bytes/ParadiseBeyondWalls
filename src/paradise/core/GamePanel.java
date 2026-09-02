@@ -4,9 +4,11 @@ import paradise.effects.Fireflies;
 import paradise.entity.Boss;
 import paradise.entity.Ghost;
 import paradise.entity.NPC;
+import paradise.entity.ThrownBlade;
 import paradise.input.KeyHandler;
 import paradise.object.Building;
 import paradise.object.CapturePoint;
+import paradise.object.HealthPickup;
 import paradise.object.Tree;
 import paradise.ui.UI;
 import paradise.world.CollisionChecker;
@@ -66,7 +68,7 @@ public class GamePanel extends JPanel implements Runnable {
     public int playerY;
     public final int baseSpeed = 4;
     public int playerHealth;
-    public final int maxHealth = 3;
+    public final int maxHealth = 200;
 
     public String direction = "down";
     public BufferedImage[] runDown = new BufferedImage[8];
@@ -74,17 +76,15 @@ public class GamePanel extends JPanel implements Runnable {
     public BufferedImage[] runRight = new BufferedImage[8];
     public BufferedImage[] runUp = new BufferedImage[8];
 
-    public BufferedImage[] attackDown;
-    public BufferedImage[] attackLeft;
-    public BufferedImage[] attackRight;
-    public BufferedImage[] attackUp;
-
     public boolean hasSword;
-    public int swingTimer;
     public int attackCooldown;
+    public java.util.ArrayList<ThrownBlade> thrownBlades = new java.util.ArrayList<>();
 
-    public static final int SWING_DURATION = 30;
-    public static final int ATTACK_COOLDOWN = 45;
+    public static final int THROW_COOLDOWN = 25;
+    private static final int BLADE_SPEED = 9;
+    private static final int BLADE_DISTANCE = 6 * 48;
+    public static final int DASH_STRIKE_DAMAGE = 1;
+    private boolean dashStrikeDone = false;
 
     public int currentLevel;
     public int capturedPoints;
@@ -96,6 +96,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     public Boss[] monsters;
     public NPC npc;
+    public java.util.ArrayList<HealthPickup> healthPickups = new java.util.ArrayList<>();
 
     public Tree[] mapTrees;
     public Building[] mapBuildings;
@@ -131,11 +132,6 @@ public class GamePanel extends JPanel implements Runnable {
         runLeft = loadSpriteSheet("src/paradise/entity/run2.png", 8);
         runRight = loadSpriteSheet("src/paradise/entity/run3.png", 8);
         runUp = loadSpriteSheet("src/paradise/entity/run4.png", 8);
-
-        attackDown = loadSpriteSheet("src/paradise/entity/attack1_down.png", 5);
-        attackLeft = loadSpriteSheet("src/paradise/entity/attack1_left.png", 5);
-        attackRight = loadSpriteSheet("src/paradise/entity/attack1_right.png", 5);
-        attackUp = loadSpriteSheet("src/paradise/entity/attack1_up.png", 5);
     }
 
     private BufferedImage[] loadSpriteSheet(String path, int frames) {
@@ -357,14 +353,20 @@ public class GamePanel extends JPanel implements Runnable {
             currentStamina = Math.min(maxStamina, currentStamina + 0.35);
         }
 
-        if (swingTimer > 0) swingTimer--;
         if (attackCooldown > 0) attackCooldown--;
-        if (!isHiding && hasSword && swingTimer == 0 && attackCooldown == 0 && keyHandler.consumeJPressed()) {
-            swingTimer = SWING_DURATION;
-            attackCooldown = ATTACK_COOLDOWN;
+        if (!isHiding && attackCooldown == 0 && keyHandler.consumeJPressed()) {
+            throwBlade();
+            attackCooldown = THROW_COOLDOWN;
             playSE(3);
-            performSlash();
         }
+
+        if (isDashing) {
+            performDashStrike();
+        } else {
+            dashStrikeDone = false;
+        }
+
+        updateThrownBlades();
 
         if (ghosts != null) {
             for (Ghost g : ghosts) if (g != null && g.alive) g.update();
@@ -389,7 +391,7 @@ public class GamePanel extends JPanel implements Runnable {
             }
         }
 
-        if (!isHiding && swingTimer == 0) {
+        if (!isHiding) {
             movePlayer();
 
             if (hitCooldown == 0 && ghosts != null) {
@@ -402,7 +404,10 @@ public class GamePanel extends JPanel implements Runnable {
             }
 
             collectCapturePoints();
+            collectHealthPickups();
         }
+
+        updateHealthPickups();
 
         doorLocked = (capturedPoints == levelConfig.pointTiles.length) && areMonstersAlive();
 
@@ -449,33 +454,80 @@ public class GamePanel extends JPanel implements Runnable {
         }
     }
 
-    private Rectangle slashBox() {
-        int reach = tileSize * 2;
-        int half = 28;
-        int centerX = playerX + playerSize / 2;
-        int centerY = playerY + playerSize / 2;
+    private void throwBlade() {
+        int startX = playerX + playerSize / 2;
+        int startY = playerY + playerSize / 2;
+        int vx = 0, vy = 0;
         switch (direction) {
-            case "up":
-                return new Rectangle(centerX - half, centerY - playerSize / 2 - reach, half * 2, reach + playerSize / 2);
-            case "down":
-                return new Rectangle(centerX - half, centerY, half * 2, reach);
-            case "left":
-                return new Rectangle(centerX - playerSize / 2 - reach, centerY - half, reach + playerSize / 2, half * 2);
-            default:
-                return new Rectangle(centerX, centerY - half, reach, half * 2);
+            case "up": vy = -1; break;
+            case "down": vy = 1; break;
+            case "left": vx = -1; break;
+            default: vx = 1; break;
+        }
+        thrownBlades.add(new ThrownBlade(startX, startY, vx * BLADE_SPEED, vy * BLADE_SPEED, BLADE_DISTANCE));
+    }
+
+    private void updateThrownBlades() {
+        java.util.Iterator<ThrownBlade> it = thrownBlades.iterator();
+        while (it.hasNext()) {
+            ThrownBlade t = it.next();
+            t.update();
+            if (t.life <= 0) {
+                it.remove();
+                continue;
+            }
+
+            boolean hit = false;
+            if (ghosts != null) {
+                for (Ghost g : ghosts) {
+                    if (g != null && g.alive) {
+                        Rectangle ghostBox = new Rectangle(g.worldX + 6, g.worldY + 6, g.size - 12, g.size - 12);
+                        if (t.box().intersects(ghostBox)) {
+                            g.kill();
+                            playSE(1);
+                            hit = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!hit && monsters != null) {
+                for (Boss m : monsters) {
+                    if (m != null && m.alive && t.box().intersects(m.hitbox())) {
+                        m.takeDamage(1);
+                        playSE(1);
+                        if (!m.alive) {
+                            int col = (m.worldX + m.size / 2) / tileSize;
+                            int row = (m.worldY + m.size / 2) / tileSize;
+                            healthPickups.add(new HealthPickup(this, col, row, 25));
+                        }
+                        if (!areMonstersAlive()) {
+                            flashStatusMessage("HORDE CLEARED! THE WAY IS OPEN!");
+                        }
+                        hit = true;
+                        break;
+                    }
+                }
+            }
+
+            if (hit) it.remove();
         }
     }
 
-    private void performSlash() {
-        Rectangle attackBox = slashBox();
+    private void performDashStrike() {
+        if (dashStrikeDone) return;
+        Rectangle dashBox = new Rectangle(playerX - 8, playerY - 8, playerSize + 16, playerSize + 16);
 
+        boolean struck = false;
         if (ghosts != null) {
             for (Ghost g : ghosts) {
                 if (g != null && g.alive) {
                     Rectangle ghostBox = new Rectangle(g.worldX + 6, g.worldY + 6, g.size - 12, g.size - 12);
-                    if (attackBox.intersects(ghostBox)) {
+                    if (dashBox.intersects(ghostBox)) {
                         g.kill();
                         playSE(1);
+                        struck = true;
                     }
                 }
             }
@@ -483,15 +535,23 @@ public class GamePanel extends JPanel implements Runnable {
 
         if (monsters != null) {
             for (Boss m : monsters) {
-                if (m != null && m.alive && attackBox.intersects(m.hitbox())) {
-                    m.takeDamage(1);
+                if (m != null && m.alive && dashBox.intersects(m.hitbox())) {
+                    m.takeDamage(DASH_STRIKE_DAMAGE);
                     playSE(1);
+                    if (!m.alive) {
+                        int col = (m.worldX + m.size / 2) / tileSize;
+                        int row = (m.worldY + m.size / 2) / tileSize;
+                        healthPickups.add(new HealthPickup(this, col, row, 25));
+                    }
                     if (!areMonstersAlive()) {
                         flashStatusMessage("HORDE CLEARED! THE WAY IS OPEN!");
                     }
+                    struck = true;
                 }
             }
         }
+
+        dashStrikeDone = true;
     }
 
     private void flashStatusMessage(String message) {
@@ -553,7 +613,7 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void harmPlayer() {
-        playerHealth--;
+        playerHealth -= 10;
         hitCooldown = 120;
         playSE(2);
 
@@ -567,7 +627,7 @@ public class GamePanel extends JPanel implements Runnable {
         }
     }
 
-    public void harmPlayerFromBoss(int damage, int bossCenterX, int bossCenterY) {
+    public void harmPlayerFromBoss(int damage, int bossCenterX, int bossCenterY, Boss source) {
         if (hitCooldown > 0) return;
         playerHealth -= damage;
         hitCooldown = 120;
@@ -577,13 +637,34 @@ public class GamePanel extends JPanel implements Runnable {
         int dy = playerY + playerSize / 2 - bossCenterY;
         int knockX = (dx == 0 ? 0 : dx > 0 ? tileSize : -tileSize);
         int knockY = (dy == 0 ? 0 : dy > 0 ? tileSize : -tileSize);
-        tryMovePlayer(knockX, 0);
-        tryMovePlayer(0, knockY);
+        knockbackPlayer(knockX, 0, source);
+        knockbackPlayer(0, knockY, source);
 
         if (playerHealth <= 0) {
             gameState = GameState.GAME_OVER;
             keyHandler.clearMovement();
         }
+    }
+
+    private void knockbackPlayer(int deltaX, int deltaY, Boss excludeBoss) {
+        if (deltaX == 0 && deltaY == 0) return;
+        if (!collisionChecker.canMove(playerX, playerY, playerSize, playerSize, deltaX, deltaY)) return;
+
+        Rectangle futureBox = new Rectangle(playerX + deltaX, playerY + deltaY, playerSize, playerSize);
+        if (mapBuildings != null) {
+            for (Building b : mapBuildings) {
+                if (b != null && b.hitbox != null && b.hitbox.intersects(futureBox)) return;
+            }
+        }
+
+        if (monsters != null) {
+            for (Boss m : monsters) {
+                if (m != null && m.alive && m != excludeBoss && m.hitbox().intersects(futureBox)) return;
+            }
+        }
+
+        playerX += deltaX;
+        playerY += deltaY;
     }
 
     private void collectCapturePoints() {
@@ -597,6 +678,29 @@ public class GamePanel extends JPanel implements Runnable {
                 capturedPoints++;
                 playSE(1);
             }
+        }
+    }
+
+    private void collectHealthPickups() {
+        Rectangle playerBox = new Rectangle(playerX, playerY, playerSize, playerSize);
+        java.util.Iterator<HealthPickup> it = healthPickups.iterator();
+        while (it.hasNext()) {
+            HealthPickup h = it.next();
+            Rectangle hBox = new Rectangle(h.worldX, h.worldY, tileSize, tileSize);
+            if (playerBox.intersects(hBox)) {
+                playerHealth = Math.min(maxHealth, playerHealth + h.healAmount);
+                it.remove();
+                playSE(1);
+            }
+        }
+    }
+
+    private void updateHealthPickups() {
+        java.util.Iterator<HealthPickup> it = healthPickups.iterator();
+        while (it.hasNext()) {
+            HealthPickup h = it.next();
+            h.update();
+            if (h.isExpired()) it.remove();
         }
     }
 
@@ -669,7 +773,7 @@ public class GamePanel extends JPanel implements Runnable {
             for (int i = 0; i < monsters.length; i++) {
                 int[] t = levelConfig.monsterSpawns[i];
                 int[] safeTile = findSafeCaptureTile(t[0], t[1]);
-                monsters[i] = new Boss(this, safeTile[0], safeTile[1], "Blood Monster", 3, 2, 1);
+                monsters[i] = new Boss(this, safeTile[0], safeTile[1], "Blood Monster", 1, 2, 15);
             }
         } else {
             monsters = new Boss[0];
@@ -682,9 +786,10 @@ public class GamePanel extends JPanel implements Runnable {
             npc = null;
         }
 
-        hasSword = levelConfig.hasSword;
-        swingTimer = 0;
+        hasSword = false;
         attackCooldown = 0;
+        thrownBlades.clear();
+        dashStrikeDone = false;
 
         dialogueActive = false;
         dialogueIndex = 0;
@@ -778,6 +883,10 @@ public class GamePanel extends JPanel implements Runnable {
             if (point != null) point.draw(g2, this, animationFrame);
         }
 
+        for (HealthPickup h : healthPickups) {
+            h.draw(g2, this, animationFrame);
+        }
+
         if (ghosts != null) {
             for (Ghost ghost : ghosts) {
                 if (ghost != null && ghost.alive) ghost.draw(g2, animationFrame);
@@ -794,6 +903,10 @@ public class GamePanel extends JPanel implements Runnable {
 
         if (!isHiding) {
             drawPlayer(g2);
+        }
+
+        for (ThrownBlade t : thrownBlades) {
+            t.draw(g2, playerX, playerY, playerScreenX, playerScreenY);
         }
 
         drawNightOverlay(g2);
@@ -843,50 +956,22 @@ public class GamePanel extends JPanel implements Runnable {
         }
 
         BufferedImage currentFrame = null;
-        boolean isAttacking = false;
+        boolean isMoving = isMoving();
+        int currentFrameIndex = isMoving ? (animationFrame / 5) % 8 : 0;
 
-        if (swingTimer > 0 && attackDown != null && attackDown[0] != null) {
-            isAttacking = true;
-            int totalFrames = attackDown.length;
-            int currentFrameIndex = (int) (((SWING_DURATION - swingTimer) / (double) SWING_DURATION) * totalFrames);
-            if (currentFrameIndex >= totalFrames) currentFrameIndex = totalFrames - 1;
-
-            switch (direction) {
-                case "up": currentFrame = attackUp[currentFrameIndex]; break;
-                case "down": currentFrame = attackDown[currentFrameIndex]; break;
-                case "left": currentFrame = attackLeft[currentFrameIndex]; break;
-                case "right": currentFrame = attackRight[currentFrameIndex]; break;
-            }
-        } else {
-            boolean isMoving = isMoving();
-            int currentFrameIndex = isMoving ? (animationFrame / 5) % 8 : 0;
-
-            switch (direction) {
-                case "up": currentFrame = runUp[currentFrameIndex]; break;
-                case "down": currentFrame = runDown[currentFrameIndex]; break;
-                case "left": currentFrame = runLeft[currentFrameIndex]; break;
-                case "right": currentFrame = runRight[currentFrameIndex]; break;
-            }
+        switch (direction) {
+            case "up": currentFrame = runUp[currentFrameIndex]; break;
+            case "down": currentFrame = runDown[currentFrameIndex]; break;
+            case "left": currentFrame = runLeft[currentFrameIndex]; break;
+            case "right": currentFrame = runRight[currentFrameIndex]; break;
         }
 
         if (currentFrame != null) {
             int drawWidth = currentFrame.getWidth() * characterScale;
             int drawHeight = currentFrame.getHeight() * characterScale;
 
-            // Standard auto-centering baseline
             int drawX = x - (drawWidth - playerSize) / 2;
             int drawY = y - (drawHeight - playerSize) / 2;
-
-            // MANUAL ALIGNMENT OVERRIDE
-            // Edit these +/- 30 values if the sprite still jumps
-            if (isAttacking) {
-                switch (direction) {
-                    case "right": drawX -= 30; break;
-                    case "left":  drawX += 30; break;
-                    case "up":    drawY += 30; break;
-                    case "down":  drawY -= 30; break;
-                }
-            }
 
             graphics.drawImage(currentFrame, drawX, drawY, drawWidth, drawHeight, null);
         } else {
