@@ -117,7 +117,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     public GamePanel() {
         setPreferredSize(new Dimension(screenWidth, screenHeight));
-        setBackground(new Color(4, 7, 16));
+        setBackground(new Color(135, 206, 235));
         setDoubleBuffered(true);
         addKeyListener(keyHandler);
         setFocusable(true);
@@ -378,6 +378,8 @@ public class GamePanel extends JPanel implements Runnable {
             }
         }
 
+        if (npc != null) npc.updateAnimation();
+
         if (hitCooldown > 0) hitCooldown--;
 
         checkHouseProximity();
@@ -617,13 +619,9 @@ public class GamePanel extends JPanel implements Runnable {
         hitCooldown = 120;
         playSE(2);
 
-        if (ghosts != null) {
-            for (Ghost ghost : ghosts) if (ghost != null) ghost.resetToSpawn();
-        }
-        movePlayerToSpawn();
         if (playerHealth <= 0) {
-            gameState = GameState.GAME_OVER;
-            keyHandler.clearMovement();
+            respawnPlayer();
+            return;
         }
     }
 
@@ -641,8 +639,8 @@ public class GamePanel extends JPanel implements Runnable {
         knockbackPlayer(0, knockY, source);
 
         if (playerHealth <= 0) {
-            gameState = GameState.GAME_OVER;
-            keyHandler.clearMovement();
+            respawnPlayer();
+            return;
         }
     }
 
@@ -850,6 +848,16 @@ public class GamePanel extends JPanel implements Runnable {
         direction = "down";
     }
 
+    private void respawnPlayer() {
+        playerHealth = maxHealth;
+        hitCooldown = 120;
+        if (ghosts != null) {
+            for (Ghost ghost : ghosts) if (ghost != null) ghost.resetToSpawn();
+        }
+        movePlayerToSpawn();
+        keyHandler.clearMovement();
+    }
+
     public boolean isOnScreen(int worldX, int worldY, int width, int height) {
         return worldX + width > playerX - playerScreenX
                 && worldX < playerX + playerScreenX + tileSize
@@ -923,8 +931,7 @@ public class GamePanel extends JPanel implements Runnable {
     }
 
     private void drawNightOverlay(Graphics2D g2) {
-        g2.setColor(new Color(6, 9, 26, 145));
-        g2.fillRect(0, 0, screenWidth, screenHeight);
+        // Daytime: no dark overlay
     }
 
     private void drawInteractionPrompt(Graphics2D g2) {

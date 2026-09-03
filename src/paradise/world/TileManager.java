@@ -89,10 +89,10 @@ public class TileManager {
 
                 switch (tileType) {
                     case TILE_WATER:
-                        g2.setColor(new Color(9, 24, 46));
+                        g2.setColor(new Color(64, 164, 223));
                         g2.fillRect(screenX, screenY, gp.tileSize, gp.tileSize);
 
-                        g2.setColor(new Color(40, 110, 165, 130));
+                        g2.setColor(new Color(200, 235, 255, 150));
 
                         int waveOffset1 = (int) Math.round(Math.sin(gp.animationFrame * 0.05 + col * 0.6) * 3);
                         int waveOffset2 = (int) Math.round(Math.sin(gp.animationFrame * 0.05 + row * 0.6 + 2) * 3);
@@ -102,25 +102,25 @@ public class TileManager {
 
                     case TILE_SAND:
                     case TILE_GATE_FLOOR:
-                        if ((col + row) % 2 == 0) g2.setColor(new Color(96, 84, 62));
-                        else g2.setColor(new Color(88, 77, 56));
+                        if ((col + row) % 2 == 0) g2.setColor(new Color(238, 221, 173));
+                        else g2.setColor(new Color(230, 210, 160));
                         g2.fillRect(screenX, screenY, gp.tileSize, gp.tileSize);
                         break;
 
                     case TILE_GRASS:
-                        if ((col + row) % 2 == 0) g2.setColor(new Color(13, 28, 21));
-                        else g2.setColor(new Color(16, 33, 24));
+                        if ((col + row) % 2 == 0) g2.setColor(new Color(99, 169, 82));
+                        else g2.setColor(new Color(107, 180, 89));
                         g2.fillRect(screenX, screenY, gp.tileSize, gp.tileSize);
                         break;
 
                     case TILE_WALL:
                     case TILE_GATE_PILLAR:
-                        g2.setColor(new Color(42, 45, 54));
+                        g2.setColor(new Color(158, 162, 171));
                         g2.fillRect(screenX, screenY, gp.tileSize, gp.tileSize);
-                        g2.setColor(new Color(22, 24, 30));
+                        g2.setColor(new Color(138, 142, 150));
                         g2.setStroke(new BasicStroke(2));
                         g2.drawRect(screenX + 1, screenY + 1, gp.tileSize - 2, gp.tileSize - 2);
-                        g2.setColor(new Color(64, 68, 78));
+                        g2.setColor(new Color(180, 184, 192));
                         g2.drawLine(screenX + 4, screenY + 16, screenX + gp.tileSize - 4, screenY + 16);
                         g2.drawLine(screenX + 4, screenY + 32, screenX + gp.tileSize - 4, screenY + 32);
                         break;
