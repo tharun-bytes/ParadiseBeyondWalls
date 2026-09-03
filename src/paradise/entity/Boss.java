@@ -77,13 +77,21 @@ public class Boss {
         return new Rectangle(worldX + 16, worldY + 16, size - 32, size - 32);
     }
 
+    private boolean moveBoss(int deltaX, int deltaY) {
+        if (deltaX == 0 && deltaY == 0) return true;
+        if (!canBossMove(deltaX, deltaY)) return false;
+        worldX += deltaX;
+        worldY += deltaY;
+        return true;
+    }
+
     private boolean canBossMove(int deltaX, int deltaY) {
         int nextX = worldX + deltaX;
         int nextY = worldY + deltaY;
 
         if (!gp.collisionChecker.canMove(worldX, worldY, size, size, deltaX, deltaY)) return false;
 
-        Rectangle futureBox = new Rectangle(nextX, nextY, size, size);
+        Rectangle futureBox = new Rectangle(nextX + 8, nextY + 8, size - 16, size - 16);
         if (gp.mapBuildings != null) {
             for (paradise.object.Building b : gp.mapBuildings) {
                 if (b != null && b.hitbox != null && b.hitbox.intersects(futureBox)) return false;
@@ -120,7 +128,7 @@ public class Boss {
             if (attackCooldown < 40) isAttacking = false; // End attack animation early in cooldown
         }
 
-        // Simple Chase AI
+        // Simple Chase AI with obstacle sliding around buildings
         int px = gp.playerX;
         int py = gp.playerY;
 
@@ -130,8 +138,24 @@ public class Boss {
         if (worldY < py) dy = speed;
         if (worldY > py) dy = -speed;
 
-        if (dx != 0 && canBossMove(dx, 0)) worldX += dx;
-        if (dy != 0 && canBossMove(0, dy)) worldY += dy;
+        int absDx = Math.abs(worldX - px);
+        int absDy = Math.abs(worldY - py);
+
+        boolean moved;
+        if (absDx >= absDy) {
+            moved = moveBoss(dx, 0) || moveBoss(0, dy);
+        } else {
+            moved = moveBoss(0, dy) || moveBoss(dx, 0);
+        }
+
+        if (!moved) {
+            // Wedged against an obstacle: try strafing perpendicular to the target
+            int sx = (dx == 0) ? (worldX < gp.worldWidth / 2 ? speed : -speed) : 0;
+            int sy = (dy == 0) ? (worldY < gp.worldHeight / 2 ? speed : -speed) : 0;
+            if (!moveBoss(sx, sy)) {
+                moveBoss(-sx, -sy);
+            }
+        }
 
         worldX = Math.max(0, Math.min(worldX, gp.worldWidth - size));
         worldY = Math.max(0, Math.min(worldY, gp.worldHeight - size));

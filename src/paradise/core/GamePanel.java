@@ -744,6 +744,9 @@ public class GamePanel extends JPanel implements Runnable {
         worldWidth = maxWorldCol * tileSize;
         worldHeight = maxWorldRow * tileSize;
 
+        playerHealth = maxHealth;
+        currentStamina = maxStamina;
+
         tileManager.createLevelMap(level);
         setupBuildings(level);
         setupTrees(level);
