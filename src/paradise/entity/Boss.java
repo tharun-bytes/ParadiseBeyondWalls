@@ -40,7 +40,7 @@ public class Boss {
         this.hp = hp;
         this.speed = speed;
         this.damage = damage;
-        this.size = (int) (gp.tileSize * 2.5); // Bosses ~2.5x tiles, big but still mobile
+        this.size = gp.tileSize * 2; // Bosses are 2x2 tiles, fits the map corridors
 
         loadBossImages();
     }
@@ -84,6 +84,26 @@ public class Boss {
         worldX += deltaX;
         worldY += deltaY;
         return true;
+    }
+
+    // Slide toward the player, trying the direct path first and then side/diagonal
+    // moves so the Demon works its way around buildings instead of getting stuck.
+    private void moveBossTowards(int dx, int dy) {
+        // Try the combined (diagonal) direction first for smoother cornering
+        if (moveBoss(dx, dy)) return;
+
+        // Try each axis independently to slide around an obstacle
+        boolean movedX = moveBoss(dx, 0);
+        boolean movedY = moveBoss(0, dy);
+        if (movedX || movedY) return;
+
+        // Fully blocked on the direct axes: try sidestepping along the blocked axis
+        // to find a way around a building corner
+        int slideDx = (dx == 0) ? speed : 0;
+        int slideDy = (dy == 0) ? speed : 0;
+        if (moveBoss(slideDx, slideDy) || moveBoss(-slideDx, -slideDy)) return;
+        if (moveBoss(dx, slideDy) || moveBoss(dx, -slideDy)) return;
+        if (moveBoss(slideDx, dy) || moveBoss(-slideDx, dy)) return;
     }
 
     private boolean canBossMove(int deltaX, int deltaY) {
@@ -171,24 +191,7 @@ public class Boss {
             if (worldY < py) dy = speed;
             if (worldY > py) dy = -speed;
 
-            int absDx = Math.abs(worldX - px);
-            int absDy = Math.abs(worldY - py);
-
-            boolean moved;
-            if (absDx >= absDy) {
-                moved = moveBoss(dx, 0) || moveBoss(0, dy);
-            } else {
-                moved = moveBoss(0, dy) || moveBoss(dx, 0);
-            }
-
-            if (!moved) {
-                // Wedged against an obstacle: try strafing perpendicular to the target
-                int sx = (dx == 0) ? (worldX < gp.worldWidth / 2 ? speed : -speed) : 0;
-                int sy = (dy == 0) ? (worldY < gp.worldHeight / 2 ? speed : -speed) : 0;
-                if (!moveBoss(sx, sy)) {
-                    moveBoss(-sx, -sy);
-                }
-            }
+            moveBossTowards(dx, dy);
         }
 
         worldX = Math.max(0, Math.min(worldX, gp.worldWidth - size));
