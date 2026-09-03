@@ -102,6 +102,7 @@ public class GamePanel extends JPanel implements Runnable {
     public Tree[] mapTrees;
     public Building[] mapBuildings;
     public Ruins[] mapRuins;
+    private java.util.ArrayList<int[]> ruinCaptureTiles = new java.util.ArrayList<>();
 
     public boolean dialogueActive;
     public int dialogueIndex;
@@ -292,15 +293,13 @@ public class GamePanel extends JPanel implements Runnable {
         };
 
         // Keep capture points clear of rubble so the player can always reach objectives
-        boolean[][] isCapture = new boolean[maxWorldCol][maxWorldRow];
+        ruinCaptureTiles = new java.util.ArrayList<>();
         if (capturePoints != null) {
             for (CapturePoint p : capturePoints) {
                 if (p != null) {
                     int c = (p.worldX + tileSize / 2) / tileSize;
                     int r = (p.worldY + tileSize / 2) / tileSize;
-                    for (int dc = -2; dc <= 2; dc++)
-                        for (int dr = -2; dr <= 2; dr++)
-                            isCapture[c + dc][r + dr] = true;
+                    ruinCaptureTiles.add(new int[]{c, r});
                 }
             }
         }
@@ -312,26 +311,59 @@ public class GamePanel extends JPanel implements Runnable {
         double wallR = levelConfig.wallRadius;
 
         // Ring of rubble between the inner plaza and the outer wall
-        for (int attempt = 0; attempt < 600 && ruinList.size() < 34; attempt++) {
+        for (int attempt = 0; attempt < 700 && ruinList.size() < 34; attempt++) {
             int col = 1 + rand.nextInt(Math.max(1, maxWorldCol - 2));
             int row = 1 + rand.nextInt(Math.max(1, maxWorldRow - 2));
 
             double dist = Math.hypot(col - centerCol, row - centerRow);
             if (dist < 0.55 * wallR || dist > 0.9 * wallR) continue;
 
-            if (!canPlaceRuin(col, row, isCapture)) continue;
+            if (!canPlaceRuin(col, row)) continue;
 
             int ruinX = col * tileSize;
             int ruinY = row * tileSize;
-            ruinList.add(new Ruins(ruinX, ruinY, ruinPool[rand.nextInt(ruinPool.length)]));
+            Ruins candidate = new Ruins(ruinX, ruinY, ruinPool[rand.nextInt(ruinPool.length)]);
+
+            // Reject if the ruin's real hitbox overlaps a building, tree, or capture point
+            if (ruinOverlapsAnything(candidate, ruinList)) continue;
+
+            ruinList.add(candidate);
         }
 
         mapRuins = ruinList.toArray(new Ruins[0]);
     }
 
-    private boolean canPlaceRuin(int col, int row, boolean[][] isCapture) {
+    // Checks whether a ruin's actual collision box hits buildings, trees, or capture points
+    private boolean ruinOverlapsAnything(Ruins candidate, ArrayList<Ruins> existing) {
+        if (candidate.hitbox == null) return true;
+
+        if (mapBuildings != null) {
+            for (Building b : mapBuildings) {
+                if (b == null) continue;
+                Rectangle bBox = new Rectangle(b.worldX, b.worldY, b.drawWidth, b.drawHeight);
+                if (bBox.intersects(candidate.hitbox)) return true;
+            }
+        }
+        if (mapTrees != null) {
+            for (Tree t : mapTrees) {
+                if (t == null) continue;
+                Rectangle tBox = new Rectangle(t.worldX - tileSize, t.worldY - tileSize, tileSize * 2, tileSize * 2);
+                if (tBox.intersects(candidate.hitbox)) return true;
+            }
+        }
+        for (int[] ct : ruinCaptureTiles) {
+            Rectangle pointBox = new Rectangle(ct[0] * tileSize, ct[1] * tileSize, tileSize * 4, tileSize * 4);
+            if (pointBox.intersects(candidate.hitbox)) return true;
+        }
+        for (Ruins r : existing) {
+            if (r != null && r.hitbox != null && r.hitbox.intersects(candidate.hitbox)) return true;
+        }
+
+        return false;
+    }
+
+    private boolean canPlaceRuin(int col, int row) {
         if (col < 0 || col >= maxWorldCol || row < 0 || row >= maxWorldRow) return false;
-        if (isCapture[col][row]) return false;
 
         int tile = tileManager.mapTileNum[col][row];
         if (tile == TileManager.TILE_WALL || tile == TileManager.TILE_WATER) return false;
@@ -340,21 +372,6 @@ public class GamePanel extends JPanel implements Runnable {
         int centerY = levelConfig.worldRows / 2;
         if (row >= centerY - 5 && row <= centerY + 4) return false; // keep corridors clear
         if (isNearBossSpawn(col, row)) return false;
-
-        int worldX = col * tileSize;
-        int worldY = row * tileSize;
-        Rectangle area = new Rectangle(worldX - tileSize, worldY - tileSize, tileSize * 3, tileSize * 3);
-
-        if (mapBuildings != null) {
-            for (Building b : mapBuildings) {
-                if (b != null && new Rectangle(b.worldX, b.worldY, b.drawWidth, b.drawHeight).intersects(area)) return false;
-            }
-        }
-        if (mapTrees != null) {
-            for (Tree t : mapTrees) {
-                if (t != null && new Rectangle(t.worldX - tileSize, t.worldY - tileSize, tileSize * 2, tileSize * 2).intersects(area)) return false;
-            }
-        }
 
         return true;
     }
