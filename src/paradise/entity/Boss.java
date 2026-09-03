@@ -39,7 +39,7 @@ public class Boss {
         this.hp = hp;
         this.speed = speed;
         this.damage = damage;
-        this.size = gp.tileSize * 2; // Bosses are 2x2 tiles large
+        this.size = (int) (gp.tileSize * 2.4); // Bosses ~2.4x tiles large
 
         loadBossImages();
     }

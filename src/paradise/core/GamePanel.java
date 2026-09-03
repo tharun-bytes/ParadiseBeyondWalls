@@ -774,7 +774,7 @@ public class GamePanel extends JPanel implements Runnable {
             for (int i = 0; i < monsters.length; i++) {
                 int[] t = levelConfig.monsterSpawns[i];
                 int[] safeTile = findSafeCaptureTile(t[0], t[1]);
-                monsters[i] = new Boss(this, safeTile[0], safeTile[1], "Demon A", 1, 2, 15);
+                monsters[i] = new Boss(this, safeTile[0], safeTile[1], "Demon A", 2, 1, 15);
             }
         } else {
             monsters = new Boss[0];
