@@ -20,7 +20,6 @@ public class Boss {
 
     private boolean enraged = false;
     private int attackCooldown = 0;
-    private int chaseDelay = 0;
     private boolean active = false;
 
     // Animation variables
@@ -41,7 +40,7 @@ public class Boss {
         this.hp = hp;
         this.speed = speed;
         this.damage = damage;
-        this.size = gp.tileSize * 3; // Bosses are 3x3 tiles large
+        this.size = (int) (gp.tileSize * 2.5); // Bosses ~2.5x tiles, big but still mobile
 
         loadBossImages();
     }
@@ -153,25 +152,24 @@ public class Boss {
             if (attackCooldown < 40) isAttacking = false; // End attack animation early in cooldown
         }
 
-        // Attack only in melee range (when the Demon actually touches the player)
-        boolean touching = hitbox().intersects(new Rectangle(px, py, gp.playerSize, gp.playerSize));
-        if (touching && attackCooldown == 0) {
+        // Attack in close melee range (about 1.5 tiles) so the Demon reacts when the player gets near
+        int meleeRange = (int) (1.5 * gp.tileSize);
+        long meleeRangeSq = (long) meleeRange * meleeRange;
+        boolean closeToPlayer = distSq <= meleeRangeSq;
+
+        if (closeToPlayer && attackCooldown == 0) {
             // Player is right next to the Demon -> melee attack
             isAttacking = true;
             attackCooldown = 60; // 1 second cooldown before the next attack
             spriteIndex = 0; // Restart the attack animation
             gp.harmPlayerFromBoss(damage, centerX, centerY, this);
         } else {
-            // Chase the player (stop momentarily while the attack winds up)
-            chaseDelay++;
-            boolean shouldMove = chaseDelay >= 2; // move every other frame -> half speed
-            if (shouldMove) chaseDelay = 0;
-
+            // Chase the player
             int dx = 0, dy = 0;
-            if (worldX < px) dx = shouldMove ? speed : 0;
-            if (worldX > px) dx = shouldMove ? -speed : 0;
-            if (worldY < py) dy = shouldMove ? speed : 0;
-            if (worldY > py) dy = shouldMove ? -speed : 0;
+            if (worldX < px) dx = speed;
+            if (worldX > px) dx = -speed;
+            if (worldY < py) dy = speed;
+            if (worldY > py) dy = -speed;
 
             int absDx = Math.abs(worldX - px);
             int absDy = Math.abs(worldY - py);
@@ -183,7 +181,7 @@ public class Boss {
                 moved = moveBoss(0, dy) || moveBoss(dx, 0);
             }
 
-            if (shouldMove && !moved) {
+            if (!moved) {
                 // Wedged against an obstacle: try strafing perpendicular to the target
                 int sx = (dx == 0) ? (worldX < gp.worldWidth / 2 ? speed : -speed) : 0;
                 int sy = (dy == 0) ? (worldY < gp.worldHeight / 2 ? speed : -speed) : 0;
