@@ -20,6 +20,7 @@ public class Boss {
 
     private boolean enraged = false;
     private int attackCooldown = 0;
+    private boolean active = false;
 
     // Animation variables
     private BufferedImage[] idleFrames;
@@ -39,7 +40,7 @@ public class Boss {
         this.hp = hp;
         this.speed = speed;
         this.damage = damage;
-        this.size = gp.tileSize * 2; // Bosses are 2x2 tiles large
+        this.size = gp.tileSize * 2; // Bosses are 2x2 tiles, fits the map corridors
 
         loadBossImages();
     }
@@ -50,10 +51,10 @@ public class Boss {
     }
 
     private void loadBossImages() {
-        // Loads your specific Blood Monster files
-        idleFrames = loadStrip("src/paradise/entity/Blood Monster_A_Walk.png");
-        attackFrames = loadStrip("src/paradise/entity/Blood Monster_A_Attack01.png");
-        deathFrames = loadStrip("src/paradise/entity/Blood Monster_A_Death.png");
+        // Loads your specific Demon A files
+        idleFrames = loadStrip("src/paradise/entity/Demon_A_Idle.png");
+        attackFrames = loadStrip("src/paradise/entity/Demon_A_Attack01.png");
+        deathFrames = loadStrip("src/paradise/entity/Demon_A_Death.png");
     }
 
     private BufferedImage[] loadStrip(String path) {
@@ -83,6 +84,26 @@ public class Boss {
         worldX += deltaX;
         worldY += deltaY;
         return true;
+    }
+
+    // Slide toward the player, trying the direct path first and then side/diagonal
+    // moves so the Demon works its way around buildings instead of getting stuck.
+    private void moveBossTowards(int dx, int dy) {
+        // Try the combined (diagonal) direction first for smoother cornering
+        if (moveBoss(dx, dy)) return;
+
+        // Try each axis independently to slide around an obstacle
+        boolean movedX = moveBoss(dx, 0);
+        boolean movedY = moveBoss(0, dy);
+        if (movedX || movedY) return;
+
+        // Fully blocked on the direct axes: try sidestepping along the blocked axis
+        // to find a way around a building corner
+        int slideDx = (dx == 0) ? speed : 0;
+        int slideDy = (dy == 0) ? speed : 0;
+        if (moveBoss(slideDx, slideDy) || moveBoss(-slideDx, -slideDy)) return;
+        if (moveBoss(dx, slideDy) || moveBoss(dx, -slideDy)) return;
+        if (moveBoss(slideDx, dy) || moveBoss(-slideDx, dy)) return;
     }
 
     private boolean canBossMove(int deltaX, int deltaY) {
@@ -123,52 +144,58 @@ public class Boss {
     public void update() {
         if (!alive) return;
 
+        // Radius (in tiles) at which the Demon wakes up and starts chasing the player
+        int detectionRange = 8 * gp.tileSize;
+
+        int px = gp.playerX;
+        int py = gp.playerY;
+
+        int centerX = worldX + size / 2;
+        int centerY = worldY + size / 2;
+        int playerCenterX = px + gp.playerSize / 2;
+        int playerCenterY = py + gp.playerSize / 2;
+
+        long distSq = (long) (centerX - playerCenterX) * (centerX - playerCenterX)
+                    + (long) (centerY - playerCenterY) * (centerY - playerCenterY);
+        long detectionRangeSq = (long) detectionRange * detectionRange;
+
+        // Stay dormant until the player enters the 8-tile radius, then stay active
+        if (!active && distSq <= detectionRangeSq) {
+            active = true;
+        }
+
+        animate();
+        if (!active) return;
+
         if (attackCooldown > 0) {
             attackCooldown--;
             if (attackCooldown < 40) isAttacking = false; // End attack animation early in cooldown
         }
 
-        // Simple Chase AI with obstacle sliding around buildings
-        int px = gp.playerX;
-        int py = gp.playerY;
+        // Attack in close melee range (about 1.5 tiles) so the Demon reacts when the player gets near
+        int meleeRange = (int) (1.5 * gp.tileSize);
+        long meleeRangeSq = (long) meleeRange * meleeRange;
+        boolean closeToPlayer = distSq <= meleeRangeSq;
 
-        int dx = 0, dy = 0;
-        if (worldX < px) dx = speed;
-        if (worldX > px) dx = -speed;
-        if (worldY < py) dy = speed;
-        if (worldY > py) dy = -speed;
-
-        int absDx = Math.abs(worldX - px);
-        int absDy = Math.abs(worldY - py);
-
-        boolean moved;
-        if (absDx >= absDy) {
-            moved = moveBoss(dx, 0) || moveBoss(0, dy);
+        if (closeToPlayer && attackCooldown == 0) {
+            // Player is right next to the Demon -> melee attack
+            isAttacking = true;
+            attackCooldown = 60; // 1 second cooldown before the next attack
+            spriteIndex = 0; // Restart the attack animation
+            gp.harmPlayerFromBoss(damage, centerX, centerY, this);
         } else {
-            moved = moveBoss(0, dy) || moveBoss(dx, 0);
-        }
+            // Chase the player
+            int dx = 0, dy = 0;
+            if (worldX < px) dx = speed;
+            if (worldX > px) dx = -speed;
+            if (worldY < py) dy = speed;
+            if (worldY > py) dy = -speed;
 
-        if (!moved) {
-            // Wedged against an obstacle: try strafing perpendicular to the target
-            int sx = (dx == 0) ? (worldX < gp.worldWidth / 2 ? speed : -speed) : 0;
-            int sy = (dy == 0) ? (worldY < gp.worldHeight / 2 ? speed : -speed) : 0;
-            if (!moveBoss(sx, sy)) {
-                moveBoss(-sx, -sy);
-            }
+            moveBossTowards(dx, dy);
         }
 
         worldX = Math.max(0, Math.min(worldX, gp.worldWidth - size));
         worldY = Math.max(0, Math.min(worldY, gp.worldHeight - size));
-
-        // Check if boss touches the player
-        if (attackCooldown == 0 && hitbox().intersects(new Rectangle(gp.playerX, gp.playerY, gp.playerSize, gp.playerSize))) {
-            gp.harmPlayerFromBoss(damage, worldX + size / 2, worldY + size / 2, this);
-            attackCooldown = 60; // 1 second cooldown before it can hit you again
-            isAttacking = true;
-            spriteIndex = 0; // Restart attack animation
-        }
-
-        animate();
     }
 
     private void animate() {
