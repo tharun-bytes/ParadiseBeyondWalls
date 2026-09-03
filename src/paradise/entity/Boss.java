@@ -20,6 +20,7 @@ public class Boss {
 
     private boolean enraged = false;
     private int attackCooldown = 0;
+    private int chaseDelay = 0;
 
     // Animation variables
     private BufferedImage[] idleFrames;
@@ -39,7 +40,7 @@ public class Boss {
         this.hp = hp;
         this.speed = speed;
         this.damage = damage;
-        this.size = (int) (gp.tileSize * 2.4); // Bosses ~2.4x tiles large
+        this.size = gp.tileSize * 3; // Bosses are 3x3 tiles large
 
         loadBossImages();
     }
@@ -123,50 +124,66 @@ public class Boss {
     public void update() {
         if (!alive) return;
 
+        // Distance in tiles the Demon can detect/attack the player from
+        int attackRange = 8 * gp.tileSize;
+
         if (attackCooldown > 0) {
             attackCooldown--;
             if (attackCooldown < 40) isAttacking = false; // End attack animation early in cooldown
         }
 
-        // Simple Chase AI with obstacle sliding around buildings
         int px = gp.playerX;
         int py = gp.playerY;
 
-        int dx = 0, dy = 0;
-        if (worldX < px) dx = speed;
-        if (worldX > px) dx = -speed;
-        if (worldY < py) dy = speed;
-        if (worldY > py) dy = -speed;
+        int centerX = worldX + size / 2;
+        int centerY = worldY + size / 2;
+        int playerCenterX = px + gp.playerSize / 2;
+        int playerCenterY = py + gp.playerSize / 2;
 
-        int absDx = Math.abs(worldX - px);
-        int absDy = Math.abs(worldY - py);
+        long distSq = (long) (centerX - playerCenterX) * (centerX - playerCenterX)
+                    + (long) (centerY - playerCenterY) * (centerY - playerCenterY);
+        long attackRangeSq = (long) attackRange * attackRange;
 
-        boolean moved;
-        if (absDx >= absDy) {
-            moved = moveBoss(dx, 0) || moveBoss(0, dy);
+        if (distSq <= attackRangeSq && attackCooldown == 0) {
+            // Player is within 8 tiles -> launch an attack
+            isAttacking = true;
+            attackCooldown = 60; // 1 second cooldown before the next attack
+            spriteIndex = 0; // Restart the attack animation
+            gp.harmPlayerFromBoss(damage, centerX, centerY, this);
         } else {
-            moved = moveBoss(0, dy) || moveBoss(dx, 0);
-        }
+            // Chase the player (stop momentarily while the attack winds up)
+            chaseDelay++;
+            boolean shouldMove = chaseDelay >= 2; // move every other frame -> half speed
+            if (shouldMove) chaseDelay = 0;
 
-        if (!moved) {
-            // Wedged against an obstacle: try strafing perpendicular to the target
-            int sx = (dx == 0) ? (worldX < gp.worldWidth / 2 ? speed : -speed) : 0;
-            int sy = (dy == 0) ? (worldY < gp.worldHeight / 2 ? speed : -speed) : 0;
-            if (!moveBoss(sx, sy)) {
-                moveBoss(-sx, -sy);
+            int dx = 0, dy = 0;
+            if (worldX < px) dx = shouldMove ? speed : 0;
+            if (worldX > px) dx = shouldMove ? -speed : 0;
+            if (worldY < py) dy = shouldMove ? speed : 0;
+            if (worldY > py) dy = shouldMove ? -speed : 0;
+
+            int absDx = Math.abs(worldX - px);
+            int absDy = Math.abs(worldY - py);
+
+            boolean moved;
+            if (absDx >= absDy) {
+                moved = moveBoss(dx, 0) || moveBoss(0, dy);
+            } else {
+                moved = moveBoss(0, dy) || moveBoss(dx, 0);
+            }
+
+            if (shouldMove && !moved) {
+                // Wedged against an obstacle: try strafing perpendicular to the target
+                int sx = (dx == 0) ? (worldX < gp.worldWidth / 2 ? speed : -speed) : 0;
+                int sy = (dy == 0) ? (worldY < gp.worldHeight / 2 ? speed : -speed) : 0;
+                if (!moveBoss(sx, sy)) {
+                    moveBoss(-sx, -sy);
+                }
             }
         }
 
         worldX = Math.max(0, Math.min(worldX, gp.worldWidth - size));
         worldY = Math.max(0, Math.min(worldY, gp.worldHeight - size));
-
-        // Check if boss touches the player
-        if (attackCooldown == 0 && hitbox().intersects(new Rectangle(gp.playerX, gp.playerY, gp.playerSize, gp.playerSize))) {
-            gp.harmPlayerFromBoss(damage, worldX + size / 2, worldY + size / 2, this);
-            attackCooldown = 60; // 1 second cooldown before it can hit you again
-            isAttacking = true;
-            spriteIndex = 0; // Restart attack animation
-        }
 
         animate();
     }
