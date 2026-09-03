@@ -68,7 +68,7 @@ public class GamePanel extends JPanel implements Runnable {
     public int playerY;
     public final int baseSpeed = 4;
     public int playerHealth;
-    public final int maxHealth = 200;
+    public final int maxHealth = 100;
 
     public String direction = "down";
     public BufferedImage[] runDown = new BufferedImage[8];
@@ -774,7 +774,7 @@ public class GamePanel extends JPanel implements Runnable {
             for (int i = 0; i < monsters.length; i++) {
                 int[] t = levelConfig.monsterSpawns[i];
                 int[] safeTile = findSafeCaptureTile(t[0], t[1]);
-                monsters[i] = new Boss(this, safeTile[0], safeTile[1], "Blood Monster", 1, 2, 15);
+                monsters[i] = new Boss(this, safeTile[0], safeTile[1], "Demon A", 1, 2, 15);
             }
         } else {
             monsters = new Boss[0];

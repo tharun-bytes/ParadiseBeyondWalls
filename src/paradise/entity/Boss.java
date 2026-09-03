@@ -50,10 +50,10 @@ public class Boss {
     }
 
     private void loadBossImages() {
-        // Loads your specific Blood Monster files
-        idleFrames = loadStrip("src/paradise/entity/Blood Monster_A_Walk.png");
-        attackFrames = loadStrip("src/paradise/entity/Blood Monster_A_Attack01.png");
-        deathFrames = loadStrip("src/paradise/entity/Blood Monster_A_Death.png");
+        // Loads your specific Demon A files
+        idleFrames = loadStrip("src/paradise/entity/Demon_A_Idle.png");
+        attackFrames = loadStrip("src/paradise/entity/Demon_A_Attack01.png");
+        deathFrames = loadStrip("src/paradise/entity/Demon_A_Death.png");
     }
 
     private BufferedImage[] loadStrip(String path) {
