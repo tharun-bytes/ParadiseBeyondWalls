@@ -9,6 +9,7 @@ import paradise.input.KeyHandler;
 import paradise.object.Building;
 import paradise.object.CapturePoint;
 import paradise.object.HealthPickup;
+import paradise.object.Ruins;
 import paradise.object.Tree;
 import paradise.ui.UI;
 import paradise.world.CollisionChecker;
@@ -100,6 +101,7 @@ public class GamePanel extends JPanel implements Runnable {
 
     public Tree[] mapTrees;
     public Building[] mapBuildings;
+    public Ruins[] mapRuins;
 
     public boolean dialogueActive;
     public int dialogueIndex;
@@ -269,6 +271,73 @@ public class GamePanel extends JPanel implements Runnable {
             f.plantRing(0.25 * wallR, 0.42 * wallR, 0.06, GREEN_MODELS);
         }
         mapTrees = treeList.toArray(new Tree[0]);
+    }
+
+    private void setupRuins(int level) {
+        String[] ruinPool = {
+                "Blue-gray_ruins1.png", "Blue-gray_ruins2.png", "Blue-gray_ruins3.png",
+                "Blue-gray_ruins4.png", "Blue-gray_ruins5.png",
+                "Brown-gray_ruins1.png", "Brown-gray_ruins2.png", "Brown-gray_ruins3.png",
+                "Brown-gray_ruins4.png", "Brown-gray_ruins5.png",
+                "Brown_ruins1.png", "Brown_ruins2.png", "Brown_ruins3.png",
+                "Brown_ruins4.png", "Brown_ruins5.png",
+                "Sand_ruins1.png", "Sand_ruins2.png", "Sand_ruins3.png",
+                "Sand_ruins4.png", "Sand_ruins5.png",
+                "Snow_ruins1.png", "Snow_ruins2.png", "Snow_ruins3.png",
+                "Snow_ruins4.png", "Snow_ruins5.png",
+                "Water_ruins1.png", "Water_ruins2.png", "Water_ruins3.png",
+                "Water_ruins4.png", "Water_ruins5.png",
+                "White_ruins1.png", "White_ruins2.png", "White_ruins3.png",
+                "White_ruins4.png", "White_ruins5.png",
+                "Yellow_ruins1.png", "Yellow_ruins2.png", "Yellow_ruins3.png",
+                "Yellow_ruins4.png", "Yellow_ruins5.png"
+        };
+
+        ArrayList<Ruins> ruinList = new ArrayList<>();
+        Random rand = new Random(100 + level);
+        int centerY = levelConfig.worldRows / 2;
+
+        for (int attempt = 0; attempt < 400 && ruinList.size() < 30; attempt++) {
+            int col = 1 + rand.nextInt(Math.max(1, maxWorldCol - 2));
+            int row = 1 + rand.nextInt(Math.max(1, maxWorldRow - 2));
+
+            if (!canPlaceRuin(col, row)) continue;
+
+            int ruinX = col * tileSize;
+            int ruinY = row * tileSize;
+            ruinList.add(new Ruins(ruinX, ruinY, ruinPool[rand.nextInt(ruinPool.length)]));
+        }
+
+        mapRuins = ruinList.toArray(new Ruins[0]);
+    }
+
+    private boolean canPlaceRuin(int col, int row) {
+        if (col < 0 || col >= maxWorldCol || row < 0 || row >= maxWorldRow) return false;
+        if ((col + row) % 2 != 0) return false; // thin the scatter out a bit
+
+        int tile = tileManager.mapTileNum[col][row];
+        if (tile == TileManager.TILE_WALL || tile == TileManager.TILE_WATER) return false;
+
+        int centerY = levelConfig.worldRows / 2;
+        if (row >= centerY - 6 && row <= centerY + 5) return false; // keep corridors clear
+        if (isNearBossSpawn(col, row)) return false;
+
+        int worldX = col * tileSize;
+        int worldY = row * tileSize;
+        Rectangle area = new Rectangle(worldX - tileSize, worldY - tileSize, tileSize * 3, tileSize * 3);
+
+        if (mapBuildings != null) {
+            for (Building b : mapBuildings) {
+                if (b != null && new Rectangle(b.worldX, b.worldY, b.drawWidth, b.drawHeight).intersects(area)) return false;
+            }
+        }
+        if (mapTrees != null) {
+            for (Tree t : mapTrees) {
+                if (t != null && new Rectangle(t.worldX - tileSize, t.worldY - tileSize, tileSize * 2, tileSize * 2).intersects(area)) return false;
+            }
+        }
+
+        return true;
     }
 
     public void startGameThread() {
@@ -748,6 +817,7 @@ public class GamePanel extends JPanel implements Runnable {
         tileManager.createLevelMap(level);
         setupBuildings(level);
         setupTrees(level);
+        setupRuins(level);
         fireflies.init();
 
         capturedPoints = 0;
@@ -888,6 +958,10 @@ public class GamePanel extends JPanel implements Runnable {
 
         if (mapTrees != null) {
             for (Tree t : mapTrees) if (t != null) t.draw(g2, this);
+        }
+
+        if (mapRuins != null) {
+            for (Ruins r : mapRuins) if (r != null) r.draw(g2, this);
         }
 
         for (CapturePoint point : capturePoints) {
