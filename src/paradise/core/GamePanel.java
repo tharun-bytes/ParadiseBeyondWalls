@@ -285,23 +285,41 @@ public class GamePanel extends JPanel implements Runnable {
                 "Sand_ruins4.png", "Sand_ruins5.png",
                 "Snow_ruins1.png", "Snow_ruins2.png", "Snow_ruins3.png",
                 "Snow_ruins4.png", "Snow_ruins5.png",
-                "Water_ruins1.png", "Water_ruins2.png", "Water_ruins3.png",
-                "Water_ruins4.png", "Water_ruins5.png",
                 "White_ruins1.png", "White_ruins2.png", "White_ruins3.png",
                 "White_ruins4.png", "White_ruins5.png",
                 "Yellow_ruins1.png", "Yellow_ruins2.png", "Yellow_ruins3.png",
                 "Yellow_ruins4.png", "Yellow_ruins5.png"
         };
 
+        // Keep capture points clear of rubble so the player can always reach objectives
+        boolean[][] isCapture = new boolean[maxWorldCol][maxWorldRow];
+        if (capturePoints != null) {
+            for (CapturePoint p : capturePoints) {
+                if (p != null) {
+                    int c = (p.worldX + tileSize / 2) / tileSize;
+                    int r = (p.worldY + tileSize / 2) / tileSize;
+                    for (int dc = -2; dc <= 2; dc++)
+                        for (int dr = -2; dr <= 2; dr++)
+                            isCapture[c + dc][r + dr] = true;
+                }
+            }
+        }
+
         ArrayList<Ruins> ruinList = new ArrayList<>();
         Random rand = new Random(100 + level);
-        int centerY = levelConfig.worldRows / 2;
+        int centerCol = levelConfig.worldCols / 2;
+        int centerRow = levelConfig.worldRows / 2;
+        double wallR = levelConfig.wallRadius;
 
-        for (int attempt = 0; attempt < 400 && ruinList.size() < 30; attempt++) {
+        // Ring of rubble between the inner plaza and the outer wall
+        for (int attempt = 0; attempt < 600 && ruinList.size() < 34; attempt++) {
             int col = 1 + rand.nextInt(Math.max(1, maxWorldCol - 2));
             int row = 1 + rand.nextInt(Math.max(1, maxWorldRow - 2));
 
-            if (!canPlaceRuin(col, row)) continue;
+            double dist = Math.hypot(col - centerCol, row - centerRow);
+            if (dist < 0.55 * wallR || dist > 0.9 * wallR) continue;
+
+            if (!canPlaceRuin(col, row, isCapture)) continue;
 
             int ruinX = col * tileSize;
             int ruinY = row * tileSize;
@@ -311,15 +329,16 @@ public class GamePanel extends JPanel implements Runnable {
         mapRuins = ruinList.toArray(new Ruins[0]);
     }
 
-    private boolean canPlaceRuin(int col, int row) {
+    private boolean canPlaceRuin(int col, int row, boolean[][] isCapture) {
         if (col < 0 || col >= maxWorldCol || row < 0 || row >= maxWorldRow) return false;
-        if ((col + row) % 2 != 0) return false; // thin the scatter out a bit
+        if (isCapture[col][row]) return false;
 
         int tile = tileManager.mapTileNum[col][row];
         if (tile == TileManager.TILE_WALL || tile == TileManager.TILE_WATER) return false;
+        if (tile == TileManager.TILE_GATE_FLOOR) return false; // keep the west gate area clear
 
         int centerY = levelConfig.worldRows / 2;
-        if (row >= centerY - 6 && row <= centerY + 5) return false; // keep corridors clear
+        if (row >= centerY - 5 && row <= centerY + 4) return false; // keep corridors clear
         if (isNearBossSpawn(col, row)) return false;
 
         int worldX = col * tileSize;
@@ -667,6 +686,12 @@ public class GamePanel extends JPanel implements Runnable {
             }
         }
 
+        if (mapRuins != null) {
+            for (Ruins r : mapRuins) {
+                if (r != null && r.hitbox != null && r.hitbox.intersects(futureBox)) return;
+            }
+        }
+
         if (monsters != null) {
             for (Boss m : monsters) {
                 if (m != null && m.alive && m.hitbox().intersects(futureBox)) return;
@@ -721,6 +746,12 @@ public class GamePanel extends JPanel implements Runnable {
         if (mapBuildings != null) {
             for (Building b : mapBuildings) {
                 if (b != null && b.hitbox != null && b.hitbox.intersects(futureBox)) return;
+            }
+        }
+
+        if (mapRuins != null) {
+            for (Ruins r : mapRuins) {
+                if (r != null && r.hitbox != null && r.hitbox.intersects(futureBox)) return;
             }
         }
 

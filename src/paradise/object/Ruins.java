@@ -4,6 +4,7 @@ import paradise.core.GamePanel;
 
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -13,6 +14,7 @@ public class Ruins {
     public int worldX, worldY;
     public BufferedImage image;
     public int drawWidth, drawHeight;
+    public Rectangle hitbox;
 
     // Scale the pixel-art ruins up so they read as ruins on the 48px tile map
     private static final int SCALE = 3;
@@ -28,6 +30,9 @@ public class Ruins {
         } catch (IOException e) {
             System.out.println("Could not load ruin image: " + fileName);
         }
+
+        // A solid block roughly covering the base of the ruin so it behaves like rubble
+        this.hitbox = new Rectangle(startX + 8, startY + 8, drawWidth - 16, drawHeight - 16);
     }
 
     public void draw(Graphics2D g2, GamePanel gp) {
@@ -39,3 +44,4 @@ public class Ruins {
         g2.drawImage(image, screenX, screenY, drawWidth, drawHeight, null);
     }
 }
+

@@ -119,6 +119,12 @@ public class Boss {
             }
         }
 
+        if (gp.mapRuins != null) {
+            for (paradise.object.Ruins r : gp.mapRuins) {
+                if (r != null && r.hitbox != null && r.hitbox.intersects(futureBox)) return false;
+            }
+        }
+
         if (gp.monsters != null) {
             for (Boss m : gp.monsters) {
                 if (m != null && m != this && m.alive && m.hitbox().intersects(futureBox)) return false;

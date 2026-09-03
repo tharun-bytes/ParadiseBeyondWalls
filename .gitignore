@@ -36,3 +36,6 @@ bin/
 
 ### Redundant nested copy (older snapshot) ###
 /ParadiseBeyondWalls1/
+
+### Accidental source archive ###
+/src.zip
