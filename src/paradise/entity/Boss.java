@@ -21,6 +21,7 @@ public class Boss {
     private boolean enraged = false;
     private int attackCooldown = 0;
     private int chaseDelay = 0;
+    private boolean active = false;
 
     // Animation variables
     private BufferedImage[] idleFrames;
@@ -124,13 +125,8 @@ public class Boss {
     public void update() {
         if (!alive) return;
 
-        // Distance in tiles the Demon can detect/attack the player from
-        int attackRange = 8 * gp.tileSize;
-
-        if (attackCooldown > 0) {
-            attackCooldown--;
-            if (attackCooldown < 40) isAttacking = false; // End attack animation early in cooldown
-        }
+        // Radius (in tiles) at which the Demon wakes up and engages the player
+        int activationRange = 8 * gp.tileSize;
 
         int px = gp.playerX;
         int py = gp.playerY;
@@ -142,9 +138,23 @@ public class Boss {
 
         long distSq = (long) (centerX - playerCenterX) * (centerX - playerCenterX)
                     + (long) (centerY - playerCenterY) * (centerY - playerCenterY);
-        long attackRangeSq = (long) attackRange * attackRange;
+        long activationRangeSq = (long) activationRange * activationRange;
 
-        if (distSq <= attackRangeSq && attackCooldown == 0) {
+        // Stay dormant until the player enters the 8-tile radius, then stay active
+        if (!active && distSq <= activationRangeSq) {
+            active = true;
+        }
+
+        animate();
+        if (!active) return;
+
+        if (attackCooldown > 0) {
+            attackCooldown--;
+            if (attackCooldown < 40) isAttacking = false; // End attack animation early in cooldown
+        }
+
+        // Once active, attack whenever the player is within range and the cooldown allows
+        if (distSq <= activationRangeSq && attackCooldown == 0) {
             // Player is within 8 tiles -> launch an attack
             isAttacking = true;
             attackCooldown = 60; // 1 second cooldown before the next attack
@@ -184,8 +194,6 @@ public class Boss {
 
         worldX = Math.max(0, Math.min(worldX, gp.worldWidth - size));
         worldY = Math.max(0, Math.min(worldY, gp.worldHeight - size));
-
-        animate();
     }
 
     private void animate() {
