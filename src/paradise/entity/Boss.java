@@ -125,8 +125,8 @@ public class Boss {
     public void update() {
         if (!alive) return;
 
-        // Radius (in tiles) at which the Demon wakes up and engages the player
-        int activationRange = 8 * gp.tileSize;
+        // Radius (in tiles) at which the Demon wakes up and starts chasing the player
+        int detectionRange = 8 * gp.tileSize;
 
         int px = gp.playerX;
         int py = gp.playerY;
@@ -138,10 +138,10 @@ public class Boss {
 
         long distSq = (long) (centerX - playerCenterX) * (centerX - playerCenterX)
                     + (long) (centerY - playerCenterY) * (centerY - playerCenterY);
-        long activationRangeSq = (long) activationRange * activationRange;
+        long detectionRangeSq = (long) detectionRange * detectionRange;
 
         // Stay dormant until the player enters the 8-tile radius, then stay active
-        if (!active && distSq <= activationRangeSq) {
+        if (!active && distSq <= detectionRangeSq) {
             active = true;
         }
 
@@ -153,9 +153,10 @@ public class Boss {
             if (attackCooldown < 40) isAttacking = false; // End attack animation early in cooldown
         }
 
-        // Once active, attack whenever the player is within range and the cooldown allows
-        if (distSq <= activationRangeSq && attackCooldown == 0) {
-            // Player is within 8 tiles -> launch an attack
+        // Attack only in melee range (when the Demon actually touches the player)
+        boolean touching = hitbox().intersects(new Rectangle(px, py, gp.playerSize, gp.playerSize));
+        if (touching && attackCooldown == 0) {
+            // Player is right next to the Demon -> melee attack
             isAttacking = true;
             attackCooldown = 60; // 1 second cooldown before the next attack
             spriteIndex = 0; // Restart the attack animation
