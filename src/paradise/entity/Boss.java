@@ -21,6 +21,7 @@ public class Boss {
     private boolean enraged = false;
     private int attackCooldown = 0;
     private boolean active = false;
+    private int stuckTicks = 0;
 
     // Animation variables
     private BufferedImage[] idleFrames;
@@ -88,22 +89,113 @@ public class Boss {
 
     // Slide toward the player, trying the direct path first and then side/diagonal
     // moves so the Demon works its way around buildings instead of getting stuck.
-    private void moveBossTowards(int dx, int dy) {
+    private boolean moveBossTowards(int dx, int dy) {
         // Try the combined (diagonal) direction first for smoother cornering
-        if (moveBoss(dx, dy)) return;
+        if (moveBoss(dx, dy)) return true;
 
         // Try each axis independently to slide around an obstacle
         boolean movedX = moveBoss(dx, 0);
         boolean movedY = moveBoss(0, dy);
-        if (movedX || movedY) return;
+        if (movedX || movedY) return true;
 
-        // Fully blocked on the direct axes: try sidestepping along the blocked axis
-        // to find a way around a building corner
-        int slideDx = (dx == 0) ? speed : 0;
-        int slideDy = (dy == 0) ? speed : 0;
-        if (moveBoss(slideDx, slideDy) || moveBoss(-slideDx, -slideDy)) return;
-        if (moveBoss(dx, slideDy) || moveBoss(dx, -slideDy)) return;
-        if (moveBoss(slideDx, dy) || moveBoss(-slideDx, dy)) return;
+        // Fully blocked on the direct axes: slide along the free axis in increasing
+        // steps so it peels around a building corner instead of jamming.
+        boolean pushAxisIsX = (dx != 0);
+        for (int rep = 1; rep <= 6; rep++) {
+            int slide = speed * rep;
+            boolean slid =
+                    pushAxisIsX ? (moveBoss(0, slide) || moveBoss(0, -slide))
+                                : (moveBoss(slide, 0) || moveBoss(-slide, 0));
+            if (slid) return true;
+        }
+
+        // Truly wedged: back up along the axis opposite the push to free itself.
+        if (pushAxisIsX) {
+            if (moveBoss(-dx, 0)) return true;
+            if (moveBoss(-dx, speed) || moveBoss(-dx, -speed)) return true;
+        } else {
+            if (moveBoss(0, -dy)) return true;
+            if (moveBoss(speed, -dy) || moveBoss(-speed, -dy)) return true;
+        }
+        return false;
+    }
+
+    // Grid A* / BFS so a Demon can route around buildings instead of sitting stuck.
+    // Returns true if it steered toward a neighbouring passable tile this frame.
+    private boolean followPath(int px, int py) {
+        int ts = gp.tileSize;
+        int cols = gp.maxWorldCol;
+        int rows = gp.maxWorldRow;
+        if (cols <= 0 || rows <= 0) return false;
+
+        int startCol = Math.max(0, Math.min(cols - 2, worldX / ts));
+        int startRow = Math.max(0, Math.min(rows - 2, worldY / ts));
+        int goalCol = Math.max(0, Math.min(cols - 1, (px + gp.playerSize / 2) / ts));
+        int goalRow = Math.max(0, Math.min(rows - 1, (py + gp.playerSize / 2) / ts));
+
+        // A* with Manhattan heuristic over the 2x2-footprint passability grid.
+        boolean[][] blocked = new boolean[cols][rows];
+        int[][] came = new int[cols][rows];
+        int[][] gScore = new int[cols][rows];
+        for (int c = 0; c < cols; c++)
+            for (int r = 0; r < rows; r++)
+                gScore[c][r] = Integer.MAX_VALUE;
+
+        java.util.Comparator<int[]> cmp = (a, b) -> {
+            int fa = gScore[a[0]][a[1]] + Math.abs(a[0] - goalCol) + Math.abs(a[1] - goalRow);
+            int fb = gScore[b[0]][b[1]] + Math.abs(b[0] - goalCol) + Math.abs(b[1] - goalRow);
+            return Integer.compare(fa, fb);
+        };
+        java.util.PriorityQueue<int[]> open = new java.util.PriorityQueue<>(cmp);
+
+        gScore[startCol][startRow] = 0;
+        came[startCol][startRow] = -1;
+        open.add(new int[]{startCol, startRow});
+        boolean found = false;
+
+        int[] gdr = {-1, 1, 0, 0};
+        int[] gdc = {0, 0, -1, 1};
+
+        while (!open.isEmpty()) {
+            int[] cur = open.poll();
+            if (cur[0] == goalCol && cur[1] == goalRow) { found = true; break; }
+            for (int d = 0; d < 4; d++) {
+                int nc = cur[0] + gdc[d];
+                int nr = cur[1] + gdr[d];
+                if (nc < 0 || nc >= cols || nr < 0 || nr >= rows) continue;
+                if (!gp.isAreaFreeForBoss(nc, nr)) continue;
+                int ng = gScore[cur[0]][cur[1]] + 1;
+                if (ng < gScore[nc][nr]) {
+                    gScore[nc][nr] = ng;
+                    came[nc][nr] = d;
+                    open.add(new int[]{nc, nr});
+                }
+            }
+        }
+
+        if (!found) return false;
+
+        // Trace the first step from start toward the goal.
+        int c = goalCol, r = goalRow;
+        while (came[c][r] != -1) {
+            int d = came[c][r];
+            int pc = c - gdc[d];
+            int pr = r - gdr[d];
+            if (pc == startCol && pr == startRow) {
+                break;
+            }
+            c = pc;
+            r = pr;
+        }
+
+        // Move center toward the neighbouring tile's center.
+        int centerX = worldX + size / 2;
+        int centerY = worldY + size / 2;
+        int targetX = c * ts + ts / 2;
+        int targetY = r * ts + ts / 2;
+        int dx = Integer.compare(targetX, centerX) * Math.min(speed, Math.abs(centerX - targetX) + 1);
+        int dy = Integer.compare(targetY, centerY) * Math.min(speed, Math.abs(centerY - targetY) + 1);
+        return moveBoss(dx, dy);
     }
 
     private boolean canBossMove(int deltaX, int deltaY) {
@@ -150,9 +242,6 @@ public class Boss {
     public void update() {
         if (!alive) return;
 
-        // Radius (in tiles) at which the Demon wakes up and starts chasing the player
-        int detectionRange = 8 * gp.tileSize;
-
         int px = gp.playerX;
         int py = gp.playerY;
 
@@ -163,12 +252,9 @@ public class Boss {
 
         long distSq = (long) (centerX - playerCenterX) * (centerX - playerCenterX)
                     + (long) (centerY - playerCenterY) * (centerY - playerCenterY);
-        long detectionRangeSq = (long) detectionRange * detectionRange;
 
-        // Stay dormant until the player enters the 8-tile radius, then stay active
-        if (!active && distSq <= detectionRangeSq) {
-            active = true;
-        }
+        // Demons are awake and chasing from the moment they spawn
+        active = true;
 
         animate();
         if (!active) return;
@@ -197,7 +283,17 @@ public class Boss {
             if (worldY < py) dy = speed;
             if (worldY > py) dy = -speed;
 
-            moveBossTowards(dx, dy);
+            boolean moved = moveBossTowards(dx, dy);
+            if (!moved) {
+                // Stuck against an obstacle: try to route around it, but throttle
+                // the pathfinding so it only runs once we're genuinely blocked a few frames.
+                stuckTicks++;
+                if (stuckTicks > 3) {
+                    if (followPath(px, py)) stuckTicks = 0;
+                }
+            } else {
+                stuckTicks = 0;
+            }
         }
 
         worldX = Math.max(0, Math.min(worldX, gp.worldWidth - size));

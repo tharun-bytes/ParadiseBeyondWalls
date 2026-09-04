@@ -6,5 +6,6 @@ public enum GameState {
     PAUSED,
     LEVEL_TRANSITION,
     GAME_OVER,
-    VICTORY
+    VICTORY,
+    NAME_INPUT
 }

@@ -14,8 +14,20 @@ public class KeyHandler implements KeyListener {
     private boolean enterPressed;
     private boolean navUpPressed, navDownPressed;
 
+    // Name-input capture buffer
+    public final StringBuilder nameBuffer = new StringBuilder();
+    private char pendingChar = 0;
+    private boolean backspacePressed = false;
+
     @Override
-    public void keyTyped(KeyEvent e) {}
+    public void keyTyped(KeyEvent e) {
+        char c = e.getKeyChar();
+        if (Character.isLetterOrDigit(c) || c == ' ') {
+            if (nameBuffer.length() < 15) {
+                pendingChar = Character.toUpperCase(c);
+            }
+        }
+    }
 
     @Override
     public void keyPressed(KeyEvent e) {
@@ -26,9 +38,10 @@ public class KeyHandler implements KeyListener {
         if (code == KeyEvent.VK_D || code == KeyEvent.VK_RIGHT) rightPressed = true;
         if (code == KeyEvent.VK_SHIFT) shiftPressed = true;
         if (code == KeyEvent.VK_E) ePressed = true;
-        if (code == KeyEvent.VK_J) jPressed = true;
+        if (code == KeyEvent.VK_SPACE) jPressed = true;
         if (code == KeyEvent.VK_T) tPressed = true;
         if (code == KeyEvent.VK_ESCAPE) escPressed = true;
+        if (code == KeyEvent.VK_BACK_SPACE) backspacePressed = true;
         if (code == KeyEvent.VK_SPACE || code == KeyEvent.VK_ENTER) enterPressed = true;
         if (code == KeyEvent.VK_SPACE || code == KeyEvent.VK_ENTER || code == KeyEvent.VK_R) restartRequested = true;
     }
@@ -93,5 +106,26 @@ public class KeyHandler implements KeyListener {
 
     public void clearMovement() {
         upPressed = downPressed = leftPressed = rightPressed = shiftPressed = ePressed = false;
+    }
+
+    /** Returns the most recently typed character (0 if none), consumed in the process. */
+    public char consumeTypedChar() {
+        char c = pendingChar;
+        pendingChar = 0;
+        return c;
+    }
+
+    /** Apply a backspace to the name buffer if one was pressed this frame. */
+    public void consumeBackspace() {
+        backspacePressed = false;
+        if (nameBuffer.length() > 0) nameBuffer.deleteCharAt(nameBuffer.length() - 1);
+    }
+
+    public boolean isBackspacePressed() {
+        return backspacePressed;
+    }
+
+    public void clearNameBuffer() {
+        nameBuffer.setLength(0);
     }
 }

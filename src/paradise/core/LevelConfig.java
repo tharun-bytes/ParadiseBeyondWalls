@@ -61,10 +61,14 @@ public class LevelConfig {
                         false,
                         new NpcData(
                                 "Old Scout", 43, 25,
-                                "You're inside Wall Maria's courtyard. Press W/A/S/D to move.",
-                                "TIP: Press [E] near a house to HIDE from the wraiths.",
-                                "Grab the 5 glowing capture points, then the WEST gate will open.",
-                                "Rest at a house when your heart beats fast. Survive, soldier."
+                                "Welcome to Wall Maria's courtyard, {name}. I'm the Old Scout.",
+                                "Press W/A/S/D or the arrow keys to MOVE. Use [T] to talk.",
+                                "Press [E] near a house to HIDE from the wraiths hunting these streets.",
+                                "Press [SPACE] to THROW a blade at enemies, and hold [Shift] while moving to DASH.",
+                                "Grab the 5 glowing capture points — each one earns you score.",
+                                "Beware, {name}: three waves of Demons guard this courtyard.",
+                                "Survive all 3 waves and capture every point, then the WEST gate will open.",
+                                "Rest at a house when your heart beats fast. Good luck, {name}."
                         )
                 );
 
@@ -87,7 +91,7 @@ public class LevelConfig {
                                 "Scout Captain", 24, 24,
                                 "Soldier! Welcome to Wall Rose — this courtyard is crawling with Blood Monsters.",
                                 "You carry no blade, but you are not helpless.",
-                                "Press [J] to THROW a blade at a range. Hold [Shift] and DASH through enemies to strike them.",
+                                "Press [SPACE] to THROW a blade at a range. Hold [Shift] and DASH through enemies to strike them.",
                                 "Capture all 7 glowing points to unlock the WEST gate.",
                                 "Slay the horde, then step through the gate to Wall Sina."
                         )

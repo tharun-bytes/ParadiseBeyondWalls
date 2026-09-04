@@ -109,6 +109,31 @@ public class GamePanel extends JPanel implements Runnable {
     public String statusMessage = "";
     public int statusMessageTimer;
     public boolean doorLocked;
+    // Entrance gate (east side, player spawn): closed on arrival, opens when the
+    // player stands near it and presses [E], with a short rise animation + sound.
+    public boolean entranceGateOpen = false;
+    public boolean entranceGateOpening = false;
+    public double entranceGateProgress = 0.0;
+    public boolean nearEntranceGate = false;
+
+    // Exit gate (west side, level clear): same idea as the entrance gate, but it
+    // only responds to [E] once the level's objective (points + monsters) is done.
+    public boolean exitGateOpen = false;
+    public boolean exitGateOpening = false;
+    public double exitGateProgress = 0.0;
+    public boolean nearExitGate = false;
+
+    private static final int GATE_OPEN_DURATION = 75;
+
+    // New: score, player name, NPC intro lock
+    public int score = 0;
+    public String playerName = "";
+    public boolean npcIntroDone = false;
+    public boolean enteringName = false;
+
+    // Wave system (used for level 1's 3 waves of enemies)
+    public int currentWave = 0;
+    public boolean waveSpawned = false;
 
     private static final int FPS = 60;
     private static final int TRANSITION_DURATION = 95;
@@ -367,7 +392,9 @@ public class GamePanel extends JPanel implements Runnable {
 
         int tile = tileManager.mapTileNum[col][row];
         if (tile == TileManager.TILE_WALL || tile == TileManager.TILE_WATER) return false;
-        if (tile == TileManager.TILE_GATE_FLOOR) return false; // keep the west gate area clear
+        if (tile == TileManager.TILE_GATE_FLOOR
+                || tile == TileManager.TILE_GATE_PILLAR
+                || tile == TileManager.TILE_GATE_DOOR) return false; // keep gate areas clear
 
         int centerY = levelConfig.worldRows / 2;
         if (row >= centerY - 5 && row <= centerY + 4) return false; // keep corridors clear
@@ -409,45 +436,90 @@ public class GamePanel extends JPanel implements Runnable {
         return false;
     }
 
+    // ---------- WAVE SYSTEM ----------
+    public int getWaveCount(int level) {
+        // Level 1 has 3 waves; other levels have a single wave
+        return (level == 1) ? 3 : 1;
+    }
+
+    public int getCurrentWaveIndex() {
+        return currentWave;
+    }
+
+    // Returns the spawn positions for the given wave of a level.
+    private int[][] getWaveSpawns(int level, int wave) {
+        if (level == 1) {
+            switch (wave) {
+                case 1:
+                    return new int[][]{{21, 14}, {29, 36}};      // Wave 1: 2 Demons
+                case 2:
+                    return new int[][]{{33, 20}, {17, 30}, {25, 33}}; // Wave 2: 3 Demons
+                case 3:
+                default:
+                    return new int[][]{{22, 22}, {28, 28}, {32, 22}, {18, 28}}; // Wave 3: 4 Demons
+            }
+        }
+        // Levels 2 & 3 use the config's monster spawns as the single wave
+        return levelConfig != null ? levelConfig.monsterSpawns : new int[][]{};
+    }
+
+    private void spawnNextWave() {
+        currentWave++;
+        int[][] positions = getWaveSpawns(currentLevel, currentWave);
+        if (positions == null || positions.length == 0) {
+            monsters = new Boss[0];
+            waveSpawned = true;
+            return;
+        }
+        monsters = new Boss[positions.length];
+        for (int i = 0; i < positions.length; i++) {
+            int[] safeTile = findSafeBossSpawn(positions[i][0], positions[i][1]);
+            monsters[i] = new Boss(this, safeTile[0], safeTile[1], "Demon A", 2, 1, 15);
+        }
+        waveSpawned = true;
+        if (getWaveCount(currentLevel) > 1) {
+            flashStatusMessage("WAVE " + currentWave + " / " + getWaveCount(currentLevel) + " — THE DEMONS ARRIVE!");
+        }
+    }
+
+    private void updateWaves() {
+        if (!waveSpawned) return;
+        // If all monsters in the current wave are dead and more waves remain, spawn the next
+        if (!areMonstersAlive() && currentWave < getWaveCount(currentLevel)) {
+            spawnNextWave();
+        }
+    }
+
     public void update() {
         animationFrame++;
-
         if (gameState == GameState.PLAYING && keyHandler.consumeEscPressed()) {
             gameState = GameState.PAUSED;
             pauseMenuIndex = 0;
             keyHandler.clearMovement();
             return;
         }
-
         if (gameState == GameState.PAUSED) {
             updatePauseMenu();
             return;
         }
-
         if (gameState == GameState.LEVEL_TRANSITION) {
             transitionTimer++;
             if (transitionTimer >= TRANSITION_DURATION) advanceLevel();
             return;
         }
-
         if (gameState == GameState.GAME_OVER || gameState == GameState.VICTORY) {
             if (keyHandler.consumeRestartRequest()) restartGame();
             return;
         }
-
         if (dialogueActive) {
             updateDialogue();
             return;
         }
-
-        if (statusMessageTimer > 0) statusMessageTimer--;
-
-        if (keyHandler.consumeTPressed() && npc != null && npc.nearPlayer(64)) {
-            dialogueActive = true;
-            dialogueIndex = 0;
-            keyHandler.clearMovement();
+        if (enteringName) {
+            updateNameInput();
             return;
         }
+        if (statusMessageTimer > 0) statusMessageTimer--;
 
         boolean moving = isMoving();
         if (keyHandler.shiftPressed && currentStamina > 0.8 && moving) {
@@ -488,6 +560,8 @@ public class GamePanel extends JPanel implements Runnable {
         if (hitCooldown > 0) hitCooldown--;
 
         checkHouseProximity();
+        checkEntranceGateProximity();
+        checkExitGateProximity();
 
         if (keyHandler.consumeEPressed()) {
             if (isHiding) {
@@ -495,6 +569,28 @@ public class GamePanel extends JPanel implements Runnable {
             } else if (currentNearbyBuilding != null) {
                 isHiding = true;
                 keyHandler.clearMovement();
+            } else if (nearEntranceGate && !entranceGateOpen && !entranceGateOpening) {
+                entranceGateOpening = true;
+                playSE(4);
+            } else if (nearExitGate && isExitReady() && !exitGateOpen && !exitGateOpening) {
+                exitGateOpening = true;
+                playSE(4);
+            }
+        }
+
+        if (entranceGateOpening) {
+            entranceGateProgress = Math.min(1.0, entranceGateProgress + 1.0 / GATE_OPEN_DURATION);
+            if (entranceGateProgress >= 1.0) {
+                entranceGateOpening = false;
+                entranceGateOpen = true;
+            }
+        }
+
+        if (exitGateOpening) {
+            exitGateProgress = Math.min(1.0, exitGateProgress + 1.0 / GATE_OPEN_DURATION);
+            if (exitGateProgress >= 1.0) {
+                exitGateOpening = false;
+                exitGateOpen = true;
             }
         }
 
@@ -516,11 +612,42 @@ public class GamePanel extends JPanel implements Runnable {
 
         updateHealthPickups();
 
+        updateWaves();
+
         doorLocked = (capturedPoints == levelConfig.pointTiles.length) && areMonstersAlive();
 
         if (!isHiding) checkDoorTransition();
     }
 
+    private void checkEntranceGateProximity() {
+        if (entranceGateOpen) {
+            nearEntranceGate = false;
+            return;
+        }
+        int gateCol = (tileManager.gateCol0 + tileManager.gateCol1) / 2;
+        int gateRow = levelConfig.worldRows / 2;
+        int gateCenterX = gateCol * tileSize + tileSize / 2;
+        int gateCenterY = gateRow * tileSize + tileSize / 2;
+        int playerCenterX = playerX + playerSize / 2;
+        int playerCenterY = playerY + playerSize / 2;
+        double dist = Math.hypot(playerCenterX - gateCenterX, playerCenterY - gateCenterY);
+        nearEntranceGate = dist < tileSize * 3.0;
+    }
+
+    private void checkExitGateProximity() {
+        if (exitGateOpen) {
+            nearExitGate = false;
+            return;
+        }
+        int gateCol = (tileManager.exitGateCol0 + tileManager.exitGateCol1) / 2;
+        int gateRow = levelConfig.worldRows / 2;
+        int gateCenterX = gateCol * tileSize + tileSize / 2;
+        int gateCenterY = gateRow * tileSize + tileSize / 2;
+        int playerCenterX = playerX + playerSize / 2;
+        int playerCenterY = playerY + playerSize / 2;
+        double dist = Math.hypot(playerCenterX - gateCenterX, playerCenterY - gateCenterY);
+        nearExitGate = dist < tileSize * 3.0;
+    }
     private boolean isMoving() {
         return keyHandler.upPressed || keyHandler.downPressed || keyHandler.leftPressed || keyHandler.rightPressed;
     }
@@ -557,8 +684,46 @@ public class GamePanel extends JPanel implements Runnable {
             if (npc == null || dialogueIndex >= npc.lineCount()) {
                 dialogueActive = false;
                 dialogueIndex = 0;
+                // The intro (name + instructions) has been fully read -> NPC can't be re-visited
+                npcIntroDone = true;
             }
         }
+    }
+
+    private void updateNameInput() {
+        // Handle backspace
+        if (keyHandler.isBackspacePressed()) {
+            keyHandler.consumeBackspace();
+        }
+
+        // Append any freshly typed characters
+        char c = keyHandler.consumeTypedChar();
+        if (c != 0) {
+            keyHandler.nameBuffer.append(c);
+        }
+
+        // Submit the name with Enter / Space
+        if (keyHandler.consumeEnterPressed()) {
+            String name = keyHandler.nameBuffer.toString().trim();
+            if (name.isEmpty()) {
+                playerName = "Soldier";
+            } else {
+                playerName = name;
+            }
+            enteringName = false;
+            gameState = GameState.PLAYING;
+            // Start the explanation dialogue, which will use the player's name
+            dialogueActive = true;
+            dialogueIndex = 0;
+            keyHandler.clearMovement();
+        }
+    }
+
+    // Returns a name-aware rendering of a dialogue line: substitutes {name} placeholders
+    public String renderLine(String raw) {
+        if (raw == null) return "";
+        String name = (playerName == null || playerName.isEmpty()) ? "Soldier" : playerName;
+        return raw.replace("{name}", name);
     }
 
     private void throwBlade() {
@@ -592,6 +757,7 @@ public class GamePanel extends JPanel implements Runnable {
                         if (t.box().intersects(ghostBox)) {
                             g.kill();
                             playSE(1);
+                            addScore(50);
                             hit = true;
                             break;
                         }
@@ -608,9 +774,11 @@ public class GamePanel extends JPanel implements Runnable {
                             int col = (m.worldX + m.size / 2) / tileSize;
                             int row = (m.worldY + m.size / 2) / tileSize;
                             healthPickups.add(new HealthPickup(this, col, row, 25));
+                            addScore(100);
                         }
-                        if (!areMonstersAlive()) {
+                        if (!areMonstersAlive() && currentWave >= getWaveCount(currentLevel)) {
                             flashStatusMessage("HORDE CLEARED! THE WAY IS OPEN!");
+                            addScore(200);
                         }
                         hit = true;
                         break;
@@ -634,6 +802,7 @@ public class GamePanel extends JPanel implements Runnable {
                     if (dashBox.intersects(ghostBox)) {
                         g.kill();
                         playSE(1);
+                        addScore(50);
                         struck = true;
                     }
                 }
@@ -649,9 +818,11 @@ public class GamePanel extends JPanel implements Runnable {
                         int col = (m.worldX + m.size / 2) / tileSize;
                         int row = (m.worldY + m.size / 2) / tileSize;
                         healthPickups.add(new HealthPickup(this, col, row, 25));
+                        addScore(100);
                     }
-                    if (!areMonstersAlive()) {
+                    if (!areMonstersAlive() && currentWave >= getWaveCount(currentLevel)) {
                         flashStatusMessage("HORDE CLEARED! THE WAY IS OPEN!");
+                        addScore(200);
                     }
                     struck = true;
                 }
@@ -659,6 +830,10 @@ public class GamePanel extends JPanel implements Runnable {
         }
 
         dashStrikeDone = true;
+    }
+
+    private void addScore(int amount) {
+        score += amount;
     }
 
     private void flashStatusMessage(String message) {
@@ -710,8 +885,12 @@ public class GamePanel extends JPanel implements Runnable {
         }
 
         if (monsters != null) {
+            Rectangle currentBox = new Rectangle(playerX, playerY, playerSize, playerSize);
             for (Boss m : monsters) {
-                if (m != null && m.alive && m.hitbox().intersects(futureBox)) return;
+                if (m == null || !m.alive) continue;
+                // Allow the player to escape out of a monster that is overlapping them;
+                // only block walking into a monster they are not already touching.
+                if (!currentBox.intersects(m.hitbox()) && m.hitbox().intersects(futureBox)) return;
             }
         }
 
@@ -773,8 +952,9 @@ public class GamePanel extends JPanel implements Runnable {
         }
 
         if (monsters != null) {
+            Rectangle currentBox = new Rectangle(playerX, playerY, playerSize, playerSize);
             for (Boss m : monsters) {
-                if (m != null && m.alive && m != excludeBoss && m.hitbox().intersects(futureBox)) return;
+                if (m != null && m.alive && m != excludeBoss && !currentBox.intersects(m.hitbox()) && m.hitbox().intersects(futureBox)) return;
             }
         }
 
@@ -792,6 +972,7 @@ public class GamePanel extends JPanel implements Runnable {
                 capturePoints[i] = null;
                 capturedPoints++;
                 playSE(1);
+                addScore(50);
             }
         }
     }
@@ -819,9 +1000,12 @@ public class GamePanel extends JPanel implements Runnable {
         }
     }
 
+    private boolean isExitReady() {
+        return capturedPoints == levelConfig.pointTiles.length && !areMonstersAlive();
+    }
+
     private void checkDoorTransition() {
-        if (capturedPoints != levelConfig.pointTiles.length) return;
-        if (areMonstersAlive()) return;
+        if (!exitGateOpen) return;
 
         int westStart = levelConfig.worldCols / 2 - (int) levelConfig.wallRadius;
         int centerRow = levelConfig.worldRows / 2;
@@ -834,7 +1018,6 @@ public class GamePanel extends JPanel implements Runnable {
             keyHandler.clearMovement();
         }
     }
-
     private void advanceLevel() {
         if (currentLevel >= LEVEL_COUNT) {
             gameState = GameState.VICTORY;
@@ -848,6 +1031,10 @@ public class GamePanel extends JPanel implements Runnable {
         playerHealth = maxHealth;
         currentStamina = 100;
         isHiding = false;
+        score = 0;
+        playerName = "";
+        npcIntroDone = false;
+        enteringName = false;
         loadLevel(1);
     }
 
@@ -887,14 +1074,24 @@ public class GamePanel extends JPanel implements Runnable {
             ghosts = new Ghost[0];
         }
 
-        if (levelConfig.monsterSpawns != null) {
+        if (level == 1) {
+            // Level 1 uses a 3-wave enemy system
+            currentWave = 0;
+            waveSpawned = false;
+            spawnNextWave();
+        } else if (levelConfig.monsterSpawns != null) {
+            // Levels 2 & 3 spawn their fixed horde as a single wave
+            currentWave = 1;
+            waveSpawned = true;
             monsters = new Boss[levelConfig.monsterSpawns.length];
             for (int i = 0; i < monsters.length; i++) {
                 int[] t = levelConfig.monsterSpawns[i];
-                int[] safeTile = findSafeCaptureTile(t[0], t[1]);
+                int[] safeTile = findSafeBossSpawn(t[0], t[1]);
                 monsters[i] = new Boss(this, safeTile[0], safeTile[1], "Demon A", 2, 1, 15);
             }
         } else {
+            currentWave = 0;
+            waveSpawned = true;
             monsters = new Boss[0];
         }
 
@@ -914,6 +1111,17 @@ public class GamePanel extends JPanel implements Runnable {
         dialogueIndex = 0;
         statusMessageTimer = 0;
         doorLocked = false;
+        entranceGateOpen = false;
+        entranceGateOpening = false;
+        entranceGateProgress = 0.0;
+        nearEntranceGate = false;
+        exitGateOpen = false;
+        exitGateOpening = false;
+        exitGateProgress = 0.0;
+        nearExitGate = false;
+        enteringName = false;
+        npcIntroDone = false;
+        keyHandler.clearNameBuffer();
 
         movePlayerToSpawn();
         hitCooldown = 70;
@@ -944,7 +1152,8 @@ public class GamePanel extends JPanel implements Runnable {
         int tileType = tileManager.mapTileNum[col][row];
         if (tileType == paradise.world.TileManager.TILE_WALL
                 || tileType == paradise.world.TileManager.TILE_WATER
-                || tileType == paradise.world.TileManager.TILE_GATE_PILLAR) {
+                || tileType == paradise.world.TileManager.TILE_GATE_PILLAR
+                || tileType == paradise.world.TileManager.TILE_GATE_DOOR) {
             return false;
         }
 
@@ -957,13 +1166,50 @@ public class GamePanel extends JPanel implements Runnable {
         return true;
     }
 
+    // True if the 2x2 tile block anchored at (col,row) is fully walkable and free of
+    // buildings/ruins so a Demon's 2x2 body can sit and move there.
+    public boolean isAreaFreeForBoss(int col, int row) {
+        if (col < 0 || col + 1 >= maxWorldCol || row < 0 || row + 1 >= maxWorldRow) return false;
+        for (int dc = 0; dc <= 1; dc++) {
+            for (int dr = 0; dr <= 1; dr++) {
+                if (!isTileFreeForCapture(col + dc, row + dr)) return false;
+            }
+        }
+        // Also ensure no ruin rubble sits in the 2x2 footprint
+        Rectangle area = new Rectangle(col * tileSize, row * tileSize, tileSize * 2, tileSize * 2);
+        if (mapRuins != null) {
+            for (Ruins r : mapRuins) {
+                if (r != null && r.hitbox != null && r.hitbox.intersects(area)) return false;
+            }
+        }
+        return true;
+    }
+
+    // Finds a tile whose 2x2 block is clear enough for a Demon, searching outward.
+    public int[] findSafeBossSpawn(int col, int row) {
+        if (isAreaFreeForBoss(col, row)) return new int[]{col, row};
+        for (int radius = 1; radius <= 12; radius++) {
+            for (int dc = -radius; dc <= radius; dc++) {
+                for (int dr = -radius; dr <= radius; dr++) {
+                    if (Math.max(Math.abs(dc), Math.abs(dr)) != radius) continue;
+                    int c = col + dc;
+                    int r = row + dr;
+                    if (isAreaFreeForBoss(c, r)) return new int[]{c, r};
+                }
+            }
+        }
+        return new int[]{col, row};
+    }
+
     private void movePlayerToSpawn() {
         int centerCol = levelConfig.worldCols / 2;
         int centerRow = levelConfig.worldRows / 2;
         int east = centerCol + (int) levelConfig.wallRadius;
-        playerX = (east + 1) * tileSize;
+        // Spawn a few tiles outside (east of) the entrance gate, facing it, instead
+        // of on top of it — the gate itself starts closed and blocks the way in.
+        playerX = (east + 4) * tileSize;
         playerY = centerRow * tileSize;
-        direction = "down";
+        direction = "left";
     }
 
     private void respawnPlayer() {
@@ -1063,11 +1309,16 @@ public class GamePanel extends JPanel implements Runnable {
             g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
             g2.setColor(Color.GREEN);
             g2.drawString("HIDDEN: Press [E] to Exit", screenWidth / 2 - 90, screenHeight - 57);
-        } else if (npc != null && npc.nearPlayer(64) && gameState == GameState.PLAYING) {
+        } else if (npc != null && npc.nearPlayer(64) && gameState == GameState.PLAYING && !npcIntroDone) {
             g2.setColor(new Color(0, 0, 0, 180));
             g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
             g2.setColor(new Color(120, 255, 170));
             g2.drawString("Press [T] to Talk", screenWidth / 2 - 78, screenHeight - 57);
+        } else if (npc != null && npc.nearPlayer(64) && gameState == GameState.PLAYING && npcIntroDone) {
+            g2.setColor(new Color(0, 0, 0, 140));
+            g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);
+            g2.setColor(new Color(180, 180, 180));
+            g2.drawString("The Scout has left you.", screenWidth / 2 - 82, screenHeight - 57);
         } else if (currentNearbyBuilding != null) {
             g2.setColor(new Color(0, 0, 0, 180));
             g2.fillRoundRect(screenWidth / 2 - 110, screenHeight - 80, 220, 36, 10, 10);

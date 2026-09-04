@@ -34,6 +34,17 @@ public class CollisionChecker {
 
     private boolean isWalkable(int col, int row) {
         int tileType = gp.tileManager.mapTileNum[col][row];
-        return tileType != TileManager.TILE_WALL && tileType != TileManager.TILE_WATER;
+        if (tileType == TileManager.TILE_WALL
+                || tileType == TileManager.TILE_WATER
+                || tileType == TileManager.TILE_GATE_PILLAR) {
+            return false;
+        }
+        if (tileType == TileManager.TILE_GATE_DOOR) {
+            return gp.entranceGateOpen;
+        }
+        if (tileType == TileManager.TILE_EXIT_GATE_DOOR) {
+            return gp.exitGateOpen;
+        }
+        return true;
     }
 }

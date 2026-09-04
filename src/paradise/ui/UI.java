@@ -71,7 +71,7 @@ public class UI {
         for (int row = 0; row < 3; row++) {
             for (int col = 0; col < 3; col++) {
                 g2.drawImage(img, dx[col], dy[row], dx[col + 1], dy[row + 1],
-                        sx[col], sy[row], sx[col + 1], sy[row + 1], null);
+                        sx[col], sy[row], sx[col + 1] - sx[col], sy[row + 1] - sy[row], null);
             }
         }
 
@@ -82,20 +82,81 @@ public class UI {
     public void draw(Graphics2D g2) {
         if (gp.gameState == GameState.PLAYING || gp.gameState == GameState.LEVEL_TRANSITION) {
             drawHeader(g2);
+            drawScore(g2);
             drawHealth(g2);
             drawStamina(g2);
             drawMiniMap(g2);
             drawDoorLockHint(g2);
+            drawEntranceGateHint(g2);
+            drawExitGateHint(g2);
             drawStatusMessage(g2);
             if (gp.gameState == GameState.LEVEL_TRANSITION) drawTransition(g2);
             if (gp.dialogueActive) drawDialogue(g2);
         } else if (gp.gameState == GameState.PAUSED) {
             drawPauseMenu(g2);
+        } else if (gp.gameState == GameState.NAME_INPUT) {
+            drawNameInput(g2);
         } else if (gp.gameState == GameState.GAME_OVER) {
             drawGameOver(g2);
         } else if (gp.gameState == GameState.VICTORY) {
             drawVictory(g2);
         }
+    }
+
+    private void drawScore(Graphics2D g2) {
+        g2.setColor(new Color(15, 25, 40, 210));
+        g2.fillRoundRect(20, 140, 150, 60, 12, 12);
+
+        g2.setColor(new Color(140, 170, 210));
+        g2.setFont(new Font("SansSerif", Font.BOLD, 10));
+        g2.drawString("SCORE", 35, 158);
+
+        g2.setColor(new Color(255, 215, 0));
+        g2.setFont(new Font("SansSerif", Font.BOLD, 24));
+        g2.drawString(String.valueOf(gp.score), 35, 180);
+
+        if (!gp.playerName.isEmpty()) {
+            g2.setColor(new Color(120, 255, 170));
+            g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+            g2.drawString("■ " + gp.playerName, 35, 195);
+        }
+    }
+
+    private void drawNameInput(Graphics2D g2) {
+        // Dim the world behind the input prompt
+        g2.setColor(new Color(15, 25, 40, 200));
+        g2.fillRect(0, 0, gp.screenWidth, gp.screenHeight);
+
+        int boxW = 560;
+        int boxH = 180;
+        int boxX = gp.screenWidth / 2 - boxW / 2;
+        int boxY = gp.screenHeight / 2 - boxH / 2;
+
+        g2.setColor(new Color(40, 55, 75));
+        g2.fillRoundRect(boxX, boxY, boxW, boxH, 18, 18);
+        g2.setColor(new Color(0, 0, 0, 120));
+        g2.fillRoundRect(boxX + 10, boxY + 10, boxW - 20, boxH - 20, 12, 12);
+
+        g2.setColor(Color.WHITE);
+        g2.setFont(new Font("SansSerif", Font.BOLD, 20));
+        String prompt = "What is your name, soldier?";
+        int pw = g2.getFontMetrics().stringWidth(prompt);
+        g2.drawString(prompt, gp.screenWidth / 2 - pw / 2, boxY + 55);
+
+        // Text field
+        String nameText = gp.keyHandler.nameBuffer.toString() + (gp.animationFrame % 40 < 20 ? "_" : "");
+        g2.setColor(new Color(10, 15, 25));
+        g2.fillRoundRect(boxX + 60, boxY + 75, boxW - 120, 45, 10, 10);
+        g2.setColor(new Color(120, 255, 170));
+        g2.setFont(new Font("SansSerif", Font.BOLD, 24));
+        int nw = g2.getFontMetrics().stringWidth(nameText);
+        g2.drawString(nameText, gp.screenWidth / 2 - nw / 2, boxY + 105);
+
+        g2.setColor(new Color(200, 210, 225));
+        g2.setFont(new Font("SansSerif", Font.PLAIN, 13));
+        String hint = "Type your name, then press ENTER to begin";
+        int hw = g2.getFontMetrics().stringWidth(hint);
+        g2.drawString(hint, gp.screenWidth / 2 - hw / 2, boxY + 150);
     }
 
     private void drawPauseMenu(Graphics2D g2) {
@@ -159,12 +220,20 @@ public class UI {
 
         g2.setColor(new Color(140, 170, 210));
         g2.setFont(new Font("SansSerif", Font.PLAIN, 10));
-        String subtitle = (gp.levelConfig != null) ? gp.levelConfig.subTitle : ("LEVEL 0" + gp.currentLevel + " • THE FALLEN COURTYARD");
+        String subtitle = (gp.levelConfig != null) ? gp.levelConfig.subTitle : ("LEVEL 0" + gp.currentLevel + " \u2022 THE FALLEN COURTYARD");
         g2.drawString(subtitle, 35, 62);
 
         g2.setColor(new Color(255, 215, 0));
         int totalPoints = (gp.levelConfig != null) ? gp.levelConfig.pointTiles.length : 5;
         g2.drawString("CAPTURE POINTS: " + gp.capturedPoints + " / " + totalPoints, 35, 85);
+
+        // Wave indicator for wave-based levels (level 1)
+        int waveCount = gp.getWaveCount(gp.currentLevel);
+        if (waveCount > 1 && gp.currentWave >= 1) {
+            g2.setColor(new Color(255, 140, 90));
+            g2.setFont(new Font("SansSerif", Font.BOLD, 11));
+            g2.drawString("WAVE: " + gp.currentWave + " / " + waveCount, 35, 100);
+        }
 
         // Monster Count Tracker
         if (gp.areMonstersAlive() && gp.monsters != null) {
@@ -229,7 +298,7 @@ public class UI {
 
     private void drawDoorLockHint(Graphics2D g2) {
         if (!gp.doorLocked || !gp.areMonstersAlive()) return;
-        String text = "THE BLOOD HORDE BLOCKS THE WEST GATE — SLAY THEM TO PASS";
+        String text = "THE BLOOD HORDE BLOCKS THE WEST GATE \u2014 SLAY THEM TO PASS";
         g2.setFont(pixelFont(15f));
         int w = g2.getFontMetrics().stringWidth(text) + 40;
         int h = 36;
@@ -239,6 +308,38 @@ public class UI {
         g2.setColor(new Color(40, 8, 8, 210));
         g2.fillRoundRect(x, y, w, h, 10, 10);
         g2.setColor(new Color(255, 120, 90));
+        g2.drawString(text, x + 20, y + 24);
+    }
+
+    private void drawEntranceGateHint(Graphics2D g2) {
+        if (gp.entranceGateOpen || !gp.nearEntranceGate) return;
+        String text = gp.entranceGateOpening ? "THE GATE CREAKS OPEN..." : "PRESS [E] TO OPEN THE GATE";
+        g2.setFont(pixelFont(15f));
+        int w = g2.getFontMetrics().stringWidth(text) + 40;
+        int h = 36;
+        int x = gp.screenWidth / 2 - w / 2;
+        int y = gp.screenHeight - 130;
+
+        g2.setColor(new Color(20, 20, 25, 210));
+        g2.fillRoundRect(x, y, w, h, 10, 10);
+        g2.setColor(new Color(230, 200, 120));
+        g2.drawString(text, x + 20, y + 24);
+    }
+
+    private void drawExitGateHint(Graphics2D g2) {
+        if (gp.exitGateOpen || !gp.nearExitGate) return;
+        boolean ready = gp.capturedPoints == gp.levelConfig.pointTiles.length && !gp.areMonstersAlive();
+        if (!ready) return;
+        String text = gp.exitGateOpening ? "THE GATE CREAKS OPEN..." : "PRESS [E] TO OPEN THE GATE";
+        g2.setFont(pixelFont(15f));
+        int w = g2.getFontMetrics().stringWidth(text) + 40;
+        int h = 36;
+        int x = gp.screenWidth / 2 - w / 2;
+        int y = gp.screenHeight - 130;
+
+        g2.setColor(new Color(20, 20, 25, 210));
+        g2.fillRoundRect(x, y, w, h, 10, 10);
+        g2.setColor(new Color(230, 200, 120));
         g2.drawString(text, x + 20, y + 24);
     }
 
@@ -276,7 +377,7 @@ public class UI {
 
     private void drawDialogue(Graphics2D g2) {
         if (gp.npc == null || !gp.dialogueActive) return;
-        String line = gp.npc.line(gp.dialogueIndex);
+        String line = gp.renderLine(gp.npc.line(gp.dialogueIndex));
 
         int boxW = gp.screenWidth - 60;
         int boxH = 104;
